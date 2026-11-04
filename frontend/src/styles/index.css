@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+
+/* Unfoldd design tokens (carried over from the matcha prototype).
+   Each one becomes a Tailwind utility: bg-brand, text-text-2, border-border, font-serif … */
+@theme {
+  --color-sidebar-bg: #15362d;
+  --color-sidebar-active: #29544a;
+  --color-sidebar-line: rgb(255 255 255 / 0.13);
+  --color-sidebar-card: #17382f;
+  --color-sidebar-text: #f4f8f6;
+  --color-sidebar-muted: rgb(228 242 236 / 0.8);
+
+  --color-brand: #173b31;
+  --color-brand-strong: #11392e;
+  --color-brand-hover: #1f4a3e;
+  --color-brand-border: #2f5a4c;
+
+  --color-bg: #f8f6f7;
+  --color-surface: #fbfafa;
+  --color-surface-input: #f2f2f4;
+  --color-border: #efedee;
+  --color-border-strong: #e6e4e6;
+
+  --color-text: #0a1325;
+  --color-text-2: #45474f;
+  --color-text-3: #5b5c64;
+  --color-text-4: #64656d;
+
+  --color-positive: #2b6a52;
+  --color-negative: #b4252a;
+  --color-negative-hover: #9c1f24;
+
+  /* Status pills and icon tiles: soft background, ink text, dot. */
+  --color-green-soft: #e6f0eb;
+  --color-green-ink: #2f5c4c;
+  --color-green-dot: #30765e;
+  --color-amber-soft: #fcefe1;
+  --color-amber-ink: #93591f;
+  --color-amber-dot: #c27a26;
+  --color-blue-soft: #e9eef8;
+  --color-blue-ink: #3a4f94;
+  --color-blue-dot: #486ad8;
+  --color-red-soft: #fbeaea;
+  --color-red-ink: #9c1f24;
+  --color-red-dot: #c3313d;
+  --color-gray-soft: #efeff1;
+  --color-gray-ink: #55565e;
+  --color-gray-dot: #8a8b93;
+  --color-indigo-soft: #efebfb;
+  --color-indigo-ink: #4b47c4;
+
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
+  --font-display: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', var(--font-sans);
+}
+
+@layer base {
+  html,
+  body {
+    @apply bg-bg font-sans text-text antialiased;
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* The gradient brand panel on the login and signup pages. */
+@utility auth-gradient {
+  background:
+    radial-gradient(40% 32% at 0% 100%, #b6ecc8 0%, rgb(140 214 160 / 0.7) 32%, rgb(90 180 120 / 0) 100%),
+    radial-gradient(52% 26% at 26% 100%, rgb(118 196 108 / 0.55) 0%, rgb(80 170 100 / 0) 100%),
+    radial-gradient(60% 50% at 34% 58%, rgb(28 118 88 / 0.6) 0%, rgb(20 100 75 / 0) 100%),
+    radial-gradient(55% 45% at 100% 100%, #013d31 0%, rgb(1 61 49 / 0) 100%),
+    linear-gradient(160deg, #033a30 0%, #06473a 34%, #0a5844 64%, #05473a 100%);
+}

@@ -1,0 +1,264 @@
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, Archive, CheckCircle2, EllipsisVertical, Pause, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router'
+import { PageHeader } from '@/components/PageHeader'
+import { TabNav } from '@/components/TabNav'
+import { Button } from '@/components/ui/Button'
+import { Card, EmptyState } from '@/components/ui/Card'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Details } from '@/components/ui/Details'
+import { Menu, type MenuItem } from '@/components/ui/Menu'
+import { isAgencyAdmin, isManagerPlus } from '@/features/agency/roles'
+import { useAgencySession } from '@/features/agency/session'
+import { clientKey, clientsApi, type ClientAction, type ClientDetail } from '@/features/clients/api'
+import { ClientBrand } from '@/features/brand/ClientBrand'
+import { CampaignList } from '@/features/campaigns/CampaignList'
+import { ClientAccess } from '@/features/clients/ClientAccess'
+import { ClientConversations } from '@/features/conversations/ClientConversations'
+import { ClientIntegrations } from '@/features/integrations/ClientIntegrations'
+import { ClientLibrary } from '@/features/library/ClientLibrary'
+import { ClientMeetings } from '@/features/meetings/MeetingList'
+import { PlanList } from '@/features/plans/PlanList'
+import { RequestList } from '@/features/requests/RequestList'
+import { ClientFormDialog } from '@/features/clients/ClientFormDialog'
+import { ClientPeople } from '@/features/clients/ClientPeople'
+import { ContentList } from '@/features/content/ContentList'
+import { actionsFor, clientActionCopy } from '@/features/clients/labels'
+import { ClientStatusPill, HealthPill } from '@/features/clients/pills'
+import { ActivityFeed } from '@/features/workspace/ActivityFeed'
+import { errorMessage } from '@/lib/errors'
+import { formatDate, initials, plural } from '@/lib/format'
+import { timezoneLabel } from '@/lib/timezones'
+import { toast } from '@/lib/toast'
+
+const actionIcon = { activate: Play, pause: Pause, complete: CheckCircle2, archive: Archive, restore: RotateCcw }
+
+/** P17–P20: one client's overview, the agency people on it, the client's own people, and its activity. */
+export function ClientDetailPage() {
+  const { id = '', tab = '' } = useParams()
+  const s = useAgencySession()
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const query = useQuery({ queryKey: clientKey(id), queryFn: () => clientsApi.get(id) })
+  const [editing, setEditing] = useState(false)
+  const [confirm, setConfirm] = useState<ClientAction | 'delete' | null>(null)
+
+  const back = { to: '/app/clients', label: 'Clients' }
+  if (query.isPending) return <PageHeader title="Client" back={back} />
+  if (query.isError) {
+    return (
+      <>
+        <PageHeader title="Client" back={back} />
+        <EmptyState title="Couldn’t open this client">{errorMessage(query.error)}</EmptyState>
+      </>
+    )
+  }
+  const c = query.data.client
+  const refresh = () => qc.invalidateQueries({ queryKey: ['agency', 'clients'] })
+
+  const runAction = async (action: ClientAction) => {
+    try {
+      await clientsApi.action(c._id, action)
+      toast(`${c.brandName} ${clientActionCopy[action].done}`)
+      void refresh()
+    } catch (err) {
+      toast(errorMessage(err), 'error')
+    }
+  }
+
+  const menu: MenuItem[] = [
+    ...(isManagerPlus(s.role)
+      ? actionsFor(c.status).map((action) => ({
+          label: clientActionCopy[action].label,
+          icon: actionIcon[action],
+          onSelect: () => (clientActionCopy[action].confirm ? setConfirm(action) : void runAction(action)),
+        }))
+      : []),
+    ...(isAgencyAdmin(s.role) ? [{ label: 'Delete client', icon: Trash2, tone: 'danger' as const, onSelect: () => setConfirm('delete'), separated: true }] : []),
+  ]
+
+  return (
+    <>
+      <PageHeader
+        back={back}
+        title={
+          <span className="flex items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-surface-input text-sm font-semibold text-text-3">
+              {c.logoUrl ? <img src={c.logoUrl} alt="" className="size-full object-cover" /> : initials(c.brandName)}
+            </span>
+            {c.brandName}
+          </span>
+        }
+        meta={
+          <>
+            <ClientStatusPill status={c.status} />
+            {c.status !== 'archived' && c.health && <HealthPill {...c.health} />}
+          </>
+        }
+        description={[c.name !== c.brandName && c.name, c.accountManager && `Account manager: ${c.accountManager.name}`].filter(Boolean).join(' · ') || undefined}
+        actions={
+          <>
+            {c.canManage && (
+              <Button onClick={() => setEditing(true)}>
+                <Pencil size={15} /> Edit details
+              </Button>
+            )}
+            {menu.length > 0 && (
+              <Menu label={`More actions for ${c.brandName}`} heading={c.brandName} items={menu} className="grid size-9 place-items-center rounded-lg border border-[#e6e5e8] bg-white hover:bg-[#f6f6f7]">
+                <EllipsisVertical size={17} />
+              </Menu>
+            )}
+          </>
+        }
+      />
+
+      {c.status === 'archived' && (
+        <p className="mb-5 rounded-lg border border-border-strong bg-surface px-4 py-3 text-[13px] text-text-2">
+          This client is archived: everything is read-only, for your team and for theirs. Restore it to make changes.
+        </p>
+      )}
+
+      <TabNav
+        label="Client sections"
+        tabs={[
+          { to: `/app/clients/${c._id}`, label: 'Overview' },
+          { to: `/app/clients/${c._id}/content`, label: 'Content' },
+          { to: `/app/clients/${c._id}/brand`, label: 'Brand DNA' },
+          { to: `/app/clients/${c._id}/campaigns`, label: 'Campaigns' },
+          { to: `/app/clients/${c._id}/plans`, label: 'Plans' },
+          { to: `/app/clients/${c._id}/requests`, label: 'Requests' },
+          { to: `/app/clients/${c._id}/meetings`, label: 'Meetings' },
+          { to: `/app/clients/${c._id}/conversations`, label: 'Conversations' },
+          { to: `/app/clients/${c._id}/library`, label: 'Library' },
+          { to: `/app/clients/${c._id}/integrations`, label: 'Integrations' },
+          { to: `/app/clients/${c._id}/team`, label: 'Agency team' },
+          { to: `/app/clients/${c._id}/members`, label: 'Client people' },
+          { to: `/app/clients/${c._id}/activity`, label: 'Activity' },
+        ]}
+      />
+
+      {tab === '' && <Overview client={c} />}
+      {tab === 'content' && <ContentList clientId={c._id} canCreate={c.status !== 'archived'} />}
+      {tab === 'brand' && <ClientBrand client={c} />}
+      {tab === 'campaigns' && <CampaignList clientId={c._id} />}
+      {tab === 'plans' && <PlanList clientId={c._id} />}
+      {tab === 'requests' && <RequestList clientId={c._id} />}
+      {tab === 'meetings' && <ClientMeetings client={c} />}
+      {tab === 'conversations' && <ClientConversations client={c} />}
+      {tab === 'library' && <ClientLibrary client={c} />}
+      {tab === 'integrations' && <ClientIntegrations client={c} />}
+      {tab === 'team' && <ClientAccess client={c} />}
+      {tab === 'members' && <ClientPeople client={c} />}
+      {tab === 'activity' && <ActivityFeed clientId={c._id} />}
+
+      {editing && (
+        <ClientFormDialog
+          client={c}
+          onClose={() => setEditing(false)}
+          onSaved={(saved) => {
+            toast(`${saved.brandName} saved`)
+            setEditing(false)
+            void refresh()
+          }}
+          onReload={() => {
+            setEditing(false)
+            void refresh()
+          }}
+        />
+      )}
+      {confirm === 'delete' && (
+        <ConfirmDialog
+          title={`Delete ${c.brandName}?`}
+          confirm="Delete client"
+          variant="danger"
+          action={() => clientsApi.remove(c._id)}
+          onClose={() => setConfirm(null)}
+          onDone={() => {
+            toast(`${c.brandName} was deleted`)
+            void refresh()
+            navigate('/app/clients', { replace: true })
+          }}
+        >
+          <p>The client disappears for your team, and its people lose access to the client app at once. Its history is kept but no longer shown.</p>
+          <p>To pause work but keep everything visible, archive it instead.</p>
+        </ConfirmDialog>
+      )}
+      {confirm && confirm !== 'delete' && (
+        <ConfirmDialog
+          title={`${clientActionCopy[confirm].label} ${c.brandName}?`}
+          confirm={clientActionCopy[confirm].label}
+          action={() => clientsApi.action(c._id, confirm)}
+          onClose={() => setConfirm(null)}
+          onDone={() => {
+            toast(`${c.brandName} ${clientActionCopy[confirm].done}`)
+            void refresh()
+          }}
+        >
+          <p>{clientActionCopy[confirm].confirm}</p>
+        </ConfirmDialog>
+      )}
+    </>
+  )
+}
+
+function Overview({ client: c }: { client: ClientDetail }) {
+  const health = c.status !== 'archived' && c.health && c.health.health !== 'on_track' ? c.health : null
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="flex flex-col gap-6">
+        {health && (
+          <section className={`flex gap-3 rounded-xl border px-5 py-4 ${health.health === 'blocked' ? 'border-red-soft bg-[#fdf3f3] text-red-ink' : 'border-amber-soft bg-[#fdf8f1] text-amber-ink'}`}>
+            <AlertTriangle size={18} className="mt-px shrink-0" />
+            <div>
+              <h2 className="text-[13px] font-semibold">{health.health === 'blocked' ? 'Blocked' : 'Needs attention'}</h2>
+              <ul className="mt-1 list-disc pl-4 text-[13px]">
+                {health.reasons.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
+        <Card title="Details">
+          <Details
+            rows={[
+              { label: 'Brand', value: c.brandName },
+              { label: 'Company', value: c.name },
+              { label: 'Services', value: c.services.join(', '), wide: true },
+              { label: 'Account manager', value: c.accountManager?.name ?? <span className="text-amber-ink">Not assigned</span> },
+              { label: 'Client since', value: c.startDate ? formatDate(c.startDate) : '' },
+              { label: 'Timezone', value: timezoneLabel(c.timezone) },
+              { label: 'Added', value: formatDate(c.createdAt) },
+            ]}
+          />
+        </Card>
+        <Card title="Internal notes" description="Only your team sees these.">
+          <p className="px-5 py-4 text-[13px] whitespace-pre-line text-text-2">{c.notes || 'No notes yet.'}</p>
+        </Card>
+      </div>
+      <div className="flex flex-col gap-6">
+        <Card title="Contact">
+          <Details
+            className="sm:grid-cols-1"
+            rows={[
+              { label: 'Name', value: c.contact.name },
+              { label: 'Email', value: c.contact.email && <a href={`mailto:${c.contact.email}`} className="hover:underline">{c.contact.email}</a> },
+              { label: 'Phone', value: c.contact.phone },
+            ]}
+          />
+        </Card>
+        <Card title="Contract">
+          <Details
+            className="sm:grid-cols-1"
+            rows={[
+              { label: 'Revisions included', value: `${plural(c.contract.revisionsIncluded, 'round')} per post` },
+              { label: 'Approval needed', value: `${plural(c.contract.approvalLeadHours, 'hour')} before publishing` },
+              { label: 'Internal review', value: c.contract.internalReview ? 'On: a manager approves before the client sees it' : 'Off: work goes straight to the client' },
+            ]}
+          />
+        </Card>
+      </div>
+    </div>
+  )
+}

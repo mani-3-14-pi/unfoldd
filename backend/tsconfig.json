@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "module": "nodenext",
+    "rootDir": "src",
+    "outDir": "dist",
+    "skipLibCheck": true,
+    "strict": true,
+
+    /* Node runs the .ts sources directly in dev (type stripping), so only erasable syntax
+       and explicit .ts import extensions; the build rewrites them to .js. */
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "moduleDetection": "force",
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}

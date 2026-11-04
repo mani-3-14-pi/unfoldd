@@ -4,7 +4,7 @@ As of 2026-11-04. Compares [MATCHA_SYSTEM.md](MATCHA_SYSTEM.md) and [DECISIONS.m
 
 ## Summary
 
-The backend is built for every phase except billing (a placeholder, by decision) and permission-aware search. The platform admin and the whole Agency Portal (web) are built on top of it. The Client App doesn't exist yet: client people land on a holding page at `/c`.
+The backend is built for every phase except billing (a placeholder, by decision). The platform admin, the whole Agency Portal and the mobile-first Client App (`/c`) are built on top of it, with permission-aware search in both apps.
 
 ## What's built
 
@@ -46,14 +46,14 @@ The backend for Phase 0 is built (✓ below). It still needs a dev database to t
 | Agency profile and setup, agency switcher | ✓ | ✓ | — |
 | Team members: invite, change role, remove (ends their sessions) | ✓ | ✓ | — |
 | Invitations (accept, expire, re-invite) | ✓ | ✓ | ✓ shared `/invite/:token` screen |
-| Clients: create, directory, search, filters, contract fields | ✓ | ✓ | — |
+| Clients: create, directory, search, filters, contract fields | ✓ | ✓ | ✓ |
 | Assigning agency people to clients | ✓ | ✓ | — |
-| Client members and roles, client login, brand switcher | ✓ | ✓ | ✗ |
+| Client members and roles, client login, brand switcher | ✓ | ✓ | ✓ |
 | Data access scoped to agency and client | ✓ | — | — |
-| File uploads (presigned) and signed downloads | ✓ | ✓ | ✗ |
-| Event log with visibility (grows from Activity) | ✓ | ✓ | ✗ |
-| Notifications engine and notification centre | ✓ | ✓ | ✗ |
-| App layout, navigation, route guards | — | ✓ | ✗ (whole app shell) |
+| File uploads (presigned) and signed downloads | ✓ | ✓ | ✓ |
+| Event log with visibility (grows from Activity) | ✓ | ✓ | ✓ |
+| Notifications engine and notification centre | ✓ | ✓ | ✓ |
+| App layout, navigation, route guards | — | ✓ | ✓ |
 
 ### Phase 1 — Core loop
 
@@ -61,16 +61,16 @@ Backend built and covered by `npm test` (backend). Voice transcripts stay pendin
 
 | Feature | Backend | Agency Portal | Client App |
 | --- | --- | --- | --- |
-| Content and its state machine | ✓ | ✓ | ✗ content hub, card, detail |
-| Versions and files, uploading a new version | ✓ | ✓ | ✗ version selector, history, compare |
+| Content and its state machine | ✓ | ✓ | ✓ |
+| Versions and files, uploading a new version | ✓ | ✓ | ✓ |
 | Internal review and approval | ✓ | ✓ | — |
 | Send to client | ✓ | ✓ | — |
-| Creative viewer (image, carousel, video) | — | ✓ | ✗ |
-| Feedback threads: comment, annotate, timestamp, voice | ✓ | ✓ except voice notes | ✗ |
-| Pending feedback drafts, then submit | ✓ | — | ✗ |
-| Approve / request changes | ✓ | ✓ | ✗ |
-| Feedback inbox and resolve | ✓ | ✓ | ✗ resolved view |
-| Manual publish | ✓ | ✓ | ✗ status view only |
+| Creative viewer (image, carousel, video) | — | ✓ | ✓ |
+| Feedback threads: comment, annotate, timestamp, voice | ✓ | ✓ | ✓ (voice notes in the portal; the client app has text, drawings and timestamps) |
+| Pending feedback drafts, then submit | ✓ | — | ✓ |
+| Approve / request changes | ✓ | ✓ | ✓ |
+| Feedback inbox and resolve | ✓ | ✓ | ✓ |
+| Manual publish | ✓ | ✓ | ✓ |
 
 ### Phase 2 — Revision engine
 
@@ -80,8 +80,8 @@ Backend built and covered by `npm test`. The AI checklist uses Claude (`AI_MODEL
 | --- | --- | --- | --- |
 | Tasks, board, dependencies, blocked flag | ✓ | ✓ | — |
 | Turning feedback into tasks | ✓ | ✓ | — |
-| AI revision checklist (background job) | ✓ | ✓ | ✗ accepted checklist only |
-| Revision progress and limits | ✓ | ✓ | ✗ |
+| AI revision checklist (background job) | ✓ | ✓ | ✓ |
+| Revision progress and limits | ✓ | ✓ | ✓ |
 
 ### Phase 3 — Command centres
 
@@ -89,8 +89,8 @@ Backend built and covered by `npm test`. Everything is computed live (D51). "Nex
 
 | Feature | Backend | Agency Portal | Client App |
 | --- | --- | --- | --- |
-| Dashboard, Needs Attention, pending approvals, team workload | ✓ | ✓ | ✗ Home, Needs Attention, All caught up |
-| Banners (manual and automatic) | ✓ | ✓ | ✗ banner and detail |
+| Dashboard, Needs Attention, pending approvals, team workload | ✓ | ✓ | ✓ |
+| Banners (manual and automatic) | ✓ | ✓ | ✓ |
 | Recent activity feed | ✓ | ✓ | — |
 
 ### Phase 4 — Planning and requests
@@ -99,11 +99,11 @@ Backend built and covered by `npm test`. Templates cover content, campaign, task
 
 | Feature | Backend | Agency Portal | Client App |
 | --- | --- | --- | --- |
-| Campaigns and briefs | ✓ | ✓ | ✗ (in client space) |
-| Monthly content plans: send and approve | ✓ | ✓ | ✗ plan and item detail |
-| Requests (Needed From You) | ✓ | ✓ | ✗ list, detail, upload |
-| Calendar | ✓ | ✓ | ✗ month and day |
-| Delay and at-risk indicators | ✓ | ✓ | ✗ |
+| Campaigns and briefs | ✓ | ✓ | ✓ |
+| Monthly content plans: send and approve | ✓ | ✓ | ✓ |
+| Requests (Needed From You) | ✓ | ✓ | ✓ |
+| Calendar | ✓ | ✓ | ✓ |
+| Delay and at-risk indicators | ✓ | ✓ | ✓ |
 | Templates | ✓ | ✓ | — |
 
 ### Phase 5 — Brand and meetings
@@ -112,11 +112,11 @@ Backend built and covered by `npm test`.
 
 | Feature | Backend | Agency Portal | Client App |
 | --- | --- | --- | --- |
-| Client onboarding (intro, personality, likes, dislikes, references, assets) | ✓ | ✓ | ✗ onboarding flow |
-| Brand DNA, its history, creative guidelines | ✓ | ✓ | ✗ |
-| Resource library and collections | ✓ | ✓ | ✗ |
-| Meetings: summary, decisions, action items | ✓ | ✓ | ✗ |
-| Communication (general, contextual, internal threads) | ✓ | ✓ | ✗ |
+| Client onboarding (intro, personality, likes, dislikes, references, assets) | ✓ | ✓ | ✓ |
+| Brand DNA, its history, creative guidelines | ✓ | ✓ | ✓ |
+| Resource library and collections | ✓ | ✓ | ✓ |
+| Meetings: summary, decisions, action items | ✓ | ✓ | ✓ |
+| Communication (general, contextual, internal threads) | ✓ | ✓ | ✓ |
 
 ### Phase 6 — Publishing and insight
 
@@ -124,9 +124,9 @@ Backend built. Instagram, Facebook, LinkedIn, YouTube and X integrations are wri
 
 | Feature | Backend | Agency Portal | Client App |
 | --- | --- | --- | --- |
-| Platform connections, scheduler, publish worker | ✓ | ✓ | ✗ status |
-| Analytics | ✓ | ✓ | ✗ |
-| Reports (frozen snapshot, shared with client) | ✓ | ✓ | ✗ |
+| Platform connections, scheduler, publish worker | ✓ | ✓ | ✓ |
+| Analytics | ✓ | ✓ | ✓ |
+| Reports (frozen snapshot, shared with client) | ✓ | ✓ | ✓ |
 
 ### Phase 7 — Admin
 
@@ -135,13 +135,13 @@ Backend built except billing (a placeholder endpoint only, by decision) and perm
 | Feature | Backend | Agency Portal | Client App |
 | --- | --- | --- | --- |
 | Agency billing | placeholder only (by decision) | ✗ | — |
-| Settings, integrations, permissions | ✓ | ✓ | ✗ profile, members, preferences |
-| Search (respects permissions) | ✗ | ✗ | ✗ |
-| Support and help | ✓ | ✓ | ✗ |
+| Settings, integrations, permissions | ✓ | ✓ | ✓ |
+| Search (respects permissions) | ✓ | ✓ | ✓ |
+| Support and help | ✓ | ✓ | ✓ |
 
 ## Cross-cutting work and notes
 
 - **Done (backend):** MongoDB job queue (`lib/jobs.ts`), Resend email through the queue, mandatory 2FA for platform admins and agency owners, idempotency keys, optimistic locking (`rev`), soft delete, and 45 end-to-end tests (`npm test -w backend`). See [BACKEND.md](BACKEND.md) for the full guide and API reference.
-- **Still open (backend):** billing, permission-aware search, speech-to-text for voice notes, media processing (thumbnails, video frames), LinkedIn/X video uploads, push notifications (rows are queued, nothing sends them).
-- **Frontend:** the Agency Portal is built (React, lazy-loaded routes). Still open there: voice notes on feedback, and search (needs the backend first). 2FA is switched off for now (`MFA_REQUIRED`, default false); turn it on before going live. Uploads, previews and logos need R2 credentials.
-- **Open decision:** whether the Client App is a separate app or routes inside `frontend/`. The docs describe it as mobile-first.
+- **Still open (backend):** billing, speech-to-text for voice notes, media processing (thumbnails, video frames), LinkedIn/X video uploads, push notifications (rows are queued, nothing sends them).
+- **Frontend:** the Agency Portal and the Client App are built (React, lazy-loaded routes), with end-to-end tests in `e2e/` (`npm run test:e2e`). 2FA is switched off for now (`MFA_REQUIRED`, default false); turn it on before going live. Uploads, previews, logos and voice notes need R2 credentials.
+- **Decided:** the Client App lives in the same frontend under `/c` (one login and session, shared components), loaded page by page.

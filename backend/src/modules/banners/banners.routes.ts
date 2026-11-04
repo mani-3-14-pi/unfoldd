@@ -61,11 +61,16 @@ const fieldsSchema = z.object({
       // Deep links stay inside the Client App.
       link: z.string().trim().max(500).regex(/^\/c\//, 'Link to a page in the client app'),
     })
+    // null removes the button.
+    .nullable()
     .optional(),
   startAt: z.iso.datetime().nullable().optional(),
   endAt: z.iso.datetime().nullable().optional(),
   order: z.number().int().min(0).max(1000).optional(),
 })
+
+/** A banner without a button. */
+const NO_CTA = { label: '', link: '' }
 
 const dates = (input: { startAt?: string | null; endAt?: string | null }) => {
   const out: Record<string, Date | null> = {}
@@ -84,7 +89,7 @@ bannersRouter.post('/', async (req, res) => {
     client: client._id,
     headline: input.headline,
     text: input.text ?? '',
-    cta: input.cta ?? { label: '', link: '' },
+    cta: input.cta ?? NO_CTA,
     image: await bannerImage(client._id, input.image),
     order: input.order ?? 0,
     ...dates(input),
@@ -107,6 +112,7 @@ bannersRouter.patch('/:id', async (req, res) => {
   const banner = await load(req, req.params.id, true)
   const set: Record<string, unknown> = { ...Object.fromEntries(Object.entries(rest).filter(([k, v]) => v !== undefined && k !== 'rev')), ...dates({ startAt, endAt }) }
   if (image !== undefined) set.image = await bannerImage(banner.client, image)
+  if (set.cta === null) set.cta = NO_CTA
   const updated = await updateWithRev(BannerModel, { _id: banner._id, agency: banner.agency }, rest.rev, set, req.agencyAuth!.user)
   res.json({ banner: await present(updated.toObject()) })
 })

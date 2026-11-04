@@ -7,6 +7,7 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useAgencySession } from '@/features/agency/session'
 import { clientsApi } from '@/features/clients/api'
+import { templatesApi, type Template } from '@/features/templates/api'
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import { fieldErrors } from '@/lib/errors'
 import { formatInZone, isoToZonedInput, zonedInputToIso } from '@/lib/zonedTime'
@@ -54,6 +55,25 @@ export function ContentFormDialog({
     revisionLimit: content?.revisionLimit == null ? '' : String(content.revisionLimit),
   })
   const [shiftReason, setShiftReason] = useState<ShiftReason | ''>('')
+  // P44/D55: a content template prefills the fields and adds its production tasks on create.
+  const templates = useQuery({ queryKey: ['agency', 'templates', 'content'], queryFn: () => templatesApi.list('type=content&pageSize=100'), enabled: !content })
+  const [templateId, setTemplateId] = useState('')
+  const pickTemplate = (id: string) => {
+    setTemplateId(id)
+    const t = templates.data?.items.find((x) => x._id === id) as Template<'content'> | undefined
+    if (!t) return
+    const b = t.body
+    setF((x) => ({
+      ...x,
+      platform: b.platform ?? x.platform,
+      format: b.format ?? x.format,
+      priority: b.priority ?? x.priority,
+      idea: b.idea || x.idea,
+      concept: b.concept || x.concept,
+      objective: b.objective || x.objective,
+      brief: b.brief || x.brief,
+    }))
+  }
   const set = (key: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [key]: e.target.value }))
 
   const publishIso = f.publishLocal ? zonedInputToIso(f.publishLocal, tz) : null
@@ -78,7 +98,9 @@ export function ContentFormDialog({
         revisionLimit: f.revisionLimit === '' ? null : Number(f.revisionLimit),
       }
       if (!content) {
-        const { content: created } = await contentApi.create({ ...body, client: clientId, publishDate: publishIso }, idem.key)
+        // `template` isn't part of ContentInput; the server reads it on create only.
+        const input = { ...body, client: clientId, publishDate: publishIso, ...(templateId ? { template: templateId } : {}) }
+        const { content: created } = await contentApi.create(input, idem.key)
         return created._id
       }
       await contentApi.update(content._id, {
@@ -134,6 +156,18 @@ export function ContentFormDialog({
               {clients.data?.items.map((c) => (
                 <option key={c._id} value={c._id}>
                   {c.brandName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {!content && (templates.data?.items.length ?? 0) > 0 && (
+          <Field label="Template (optional)" htmlFor="ct-template" error={errors.template} hint="Fills in the fields below and adds its production tasks.">
+            <Select id="ct-template" value={templateId} onChange={(e) => pickTemplate(e.target.value)}>
+              <option value="">No template</option>
+              {templates.data?.items.map((t) => (
+                <option key={t._id} value={t._id}>
+                  {t.name}
                 </option>
               ))}
             </Select>

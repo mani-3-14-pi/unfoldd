@@ -63,8 +63,8 @@ export function BannerFormDialog({
         headline: f.headline.trim(),
         text: f.text.trim(),
         image: image.id,
-        // The server only accepts client-app links, so an empty one leaves the button out.
-        ...(f.ctaLink.trim() ? { cta: { label: f.ctaLabel.trim(), link: f.ctaLink.trim() } } : {}),
+        // An empty link means no button: left out on create, removed (null) on edit.
+        ...(f.ctaLink.trim() ? { cta: { label: f.ctaLabel.trim(), link: f.ctaLink.trim() } } : banner ? { cta: null } : {}),
         startAt,
         endAt,
       }

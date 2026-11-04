@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { RouteError } from '@/components/RouteError'
 import { AdminLayout } from '@/layouts/AdminLayout'
 import { AgencyLayout } from '@/layouts/AgencyLayout'
+import { ClientLayout } from '@/layouts/ClientLayout'
 import { AdminLoginPage } from '@/pages/admin/AdminLoginPage'
 import { AgencyLoginPage } from '@/pages/agency/AgencyLoginPage'
 import { AgencySignupPage } from '@/pages/agency/AgencySignupPage'
@@ -70,8 +71,39 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Client app: a holding page until it's built
-      page('c/*', () => import('@/pages/client/ClientPlaceholderPage').then((m) => m.ClientPlaceholderPage)),
+      // Client app (mobile-first)
+      {
+        path: 'c',
+        element: <ClientLayout />,
+        children: [
+          page(undefined, () => import('@/pages/client/ClientHomePage').then((m) => m.ClientHomePage)),
+          page('content', () => import('@/pages/client/ClientContentPage').then((m) => m.ClientContentPage)),
+          page('content/:id', () => import('@/pages/client/ClientContentDetailPage').then((m) => m.ClientContentDetailPage)),
+          page('calendar', () => import('@/pages/client/ClientCalendarPage').then((m) => m.ClientCalendarPage)),
+          page('requests', () => import('@/pages/client/ClientRequestsPage').then((m) => m.ClientRequestsPage)),
+          page('requests/:id', () => import('@/pages/client/ClientRequestDetailPage').then((m) => m.ClientRequestDetailPage)),
+          page('plans', () => import('@/pages/client/ClientPlansPage').then((m) => m.ClientPlansPage)),
+          page('plans/:id', () => import('@/pages/client/ClientPlanDetailPage').then((m) => m.ClientPlanDetailPage)),
+          page('campaigns', () => import('@/pages/client/ClientCampaignsPage').then((m) => m.ClientCampaignsPage)),
+          page('campaigns/:id', () => import('@/pages/client/ClientCampaignDetailPage').then((m) => m.ClientCampaignDetailPage)),
+          page('brand', () => import('@/pages/client/ClientBrandPage').then((m) => m.ClientBrandPage)),
+          page('onboarding', () => import('@/pages/client/ClientOnboardingPage').then((m) => m.ClientOnboardingPage)),
+          page('library', () => import('@/pages/client/ClientLibraryPage').then((m) => m.ClientLibraryPage)),
+          page('meetings', () => import('@/pages/client/ClientMeetingsPage').then((m) => m.ClientMeetingsPage)),
+          page('meetings/:id', () => import('@/pages/client/ClientMeetingDetailPage').then((m) => m.ClientMeetingDetailPage)),
+          page('conversations', () => import('@/pages/client/ClientConversationsPage').then((m) => m.ClientConversationsPage)),
+          page('conversations/:id', () => import('@/pages/client/ClientConversationPage').then((m) => m.ClientConversationPage)),
+          page('analytics', () => import('@/pages/client/ClientAnalyticsPage').then((m) => m.ClientAnalyticsPage)),
+          page('reports/:id', () => import('@/pages/client/ClientReportPage').then((m) => m.ClientReportPage)),
+          page('notifications', () => import('@/pages/client/ClientNotificationsPage').then((m) => m.ClientNotificationsPage)),
+          page('banners/:id', () => import('@/pages/client/ClientBannerPage').then((m) => m.ClientBannerPage)),
+          page('more', () => import('@/pages/client/ClientMorePage').then((m) => m.ClientMorePage)),
+          page('people', () => import('@/pages/client/ClientPeoplePage').then((m) => m.ClientPeoplePage)),
+          page('profile', () => import('@/pages/client/ClientProfilePage').then((m) => m.ClientProfilePage)),
+          page('help', () => import('@/pages/client/ClientHelpPage').then((m) => m.ClientHelpPage)),
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
 
       // Platform admin (super admin)
       { path: 'admin/login', element: <AdminLoginPage /> },

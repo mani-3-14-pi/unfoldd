@@ -7,10 +7,20 @@ import { formatAspect, formatTime, pinLabel } from './labels'
 
 const INK = '#e5484d'
 
-/** File name, type and a short-lived signed URL for every slide of a version (rule §12.6). */
-function useSlides(version: Version) {
+/** A slide's media handed in by the caller (keyed by the version file's `_id`), instead of fetched from `/files`. */
+export interface SlideMedia {
+  url: string | null
+  name?: string
+  mimeType?: string
+}
+
+/**
+ * File name, type and a short-lived signed URL for every slide of a version (rule §12.6). Agency people fetch
+ * them from `/files`; client people can't read version files there (D39), so the client app passes `media`.
+ */
+function useSlides(version: Version, media?: Record<string, SlideMedia>) {
   const metas = useQueries({
-    queries: version.files.map((f) => ({ queryKey: ['files', 'meta', f.file], queryFn: () => contentApi.file(f.file), staleTime: Infinity, retry: false })),
+    queries: version.files.map((f) => ({ queryKey: ['files', 'meta', f.file], queryFn: () => contentApi.file(f.file), staleTime: Infinity, retry: false, enabled: !media })),
   })
   const urls = useQueries({
     queries: version.files.map((f) => ({
@@ -19,14 +29,21 @@ function useSlides(version: Version) {
       // Signed URLs expire; refetch well before they do.
       staleTime: 4 * 60_000,
       retry: false,
+      enabled: !media,
     })),
   })
-  return version.files.map((f, i) => ({
-    ...f,
-    meta: metas[i]?.data?.file,
-    url: urls[i]?.data?.url,
-    unavailable: !!urls[i]?.isError,
-  }))
+  return version.files.map((f, i) => {
+    if (media) {
+      const m = media[f._id]
+      return {
+        ...f,
+        meta: m ? { id: f.file, name: m.name ?? '', mimeType: m.mimeType ?? 'image/*', size: 0, status: 'ready' as const } : undefined,
+        url: m?.url ?? undefined,
+        unavailable: !m?.url,
+      }
+    }
+    return { ...f, meta: metas[i]?.data?.file, url: urls[i]?.data?.url, unavailable: !!urls[i]?.isError }
+  })
 }
 
 /** The first point of a thread's drawing: where its numbered pin sits. */
@@ -47,6 +64,7 @@ export function CreativeViewer({
   onDraft,
   draft,
   compact = false,
+  media,
 }: {
   version: Version
   format: Format
@@ -59,8 +77,10 @@ export function CreativeViewer({
   onDraft?: (anchor: Anchor | null) => void
   draft?: Anchor | null
   compact?: boolean
+  /** Slide media supplied by the caller (the client app); without it the viewer fetches from `/files`. */
+  media?: Record<string, SlideMedia>
 }) {
-  const slides = useSlides(version)
+  const slides = useSlides(version, media)
   const [index, setIndex] = useState(0)
   const [aspect, setAspect] = useState<number | null>(null)
   const [tool, setTool] = useState<Shape['type']>('circle')

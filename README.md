@@ -51,7 +51,9 @@ npm run dev                                    # API on :8787, web on :5173
 | URL | Who |
 |---|---|
 | http://localhost:5173/admin | Platform (super) admin: username + password from `backend/.env` |
-| http://localhost:5173/login, `/signup` | Agency people (tenants) |
+| http://localhost:5173/login, `/signup` | Agency people (tenants) and client people |
+| http://localhost:5173/app | Agency portal |
+| http://localhost:5173/c | Client app (mobile-first) |
 
 `npm run seed:demo -w backend` adds 64 demo agencies (emails `@demo.unfoldd.test`, password `demo-password`)
 so lists and filters have data; `npm run seed:demo -w backend -- --clear` removes them again.
@@ -66,6 +68,8 @@ Vite proxies `/api` to the backend, so the frontend always calls same-origin `/a
 | `npm run build` | type-check and build both into `dist/` |
 | `npm run typecheck` | type-check both |
 | `npm run lint` | oxlint both |
+| `npm run test:e2e` | end-to-end tests (Playwright) on a throwaway in-memory database; ports 8790/5175 |
+| `npm test` | backend tests, then the end-to-end tests |
 
 Run one side only with `npm run dev -w backend` or `npm run dev -w frontend`.
 

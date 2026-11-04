@@ -22,12 +22,26 @@ export function SupportPage() {
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const page = Number(params.get('page') ?? 1)
+  const pageSize = Number(params.get('pageSize') ?? 25)
+  /** Changes paging in the URL, keeping the open ticket. */
+  const paging = (patch: Record<string, string | null>) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p)
+        for (const [k, v] of Object.entries(patch)) {
+          if (v === null) next.delete(k)
+          else next.set(k, v)
+        }
+        return next
+      },
+      { replace: true },
+    )
   const selected = params.get('ticket')
   const select = (id: string | null) => setParams((p) => ({ ...Object.fromEntries(p), ...(id ? { ticket: id } : {}) }), { replace: true })
 
   const list = useQuery({
-    queryKey: ['agency', 'support', 'list', page],
-    queryFn: () => supportApi.list(new URLSearchParams({ page: String(page), pageSize: '25' }).toString()),
+    queryKey: ['agency', 'support', 'list', page, pageSize],
+    queryFn: () => supportApi.list(new URLSearchParams({ page: String(page), pageSize: String(pageSize) }).toString()),
     placeholderData: keepPreviousData,
   })
   const current = selected ?? list.data?.items[0]?._id ?? null
@@ -81,8 +95,13 @@ export function SupportPage() {
                 </li>
               ))}
             </ul>
-            {list.data.total > list.data.pageSize && (
-              <Pagination {...list.data} noun="tickets" onPage={(p) => setParams({ page: String(p) }, { replace: true })} onPageSize={() => undefined} />
+            {list.data.total > 10 && (
+              <Pagination
+                {...list.data}
+                noun="tickets"
+                onPage={(p) => paging({ page: String(p) })}
+                onPageSize={(size) => paging({ pageSize: size === 25 ? null : String(size), page: null })}
+              />
             )}
           </Card>
           {current && <TicketThread id={current} />}

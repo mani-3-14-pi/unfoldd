@@ -55,6 +55,7 @@ export function CampaignFormDialog({
     owner: campaign ? (campaign.owner ?? '') : s.user.id,
   })
   const [platforms, setPlatforms] = useState<Platform[]>(campaign?.platforms ?? [])
+  const [members, setMembers] = useState<string[]>(campaign?.team ?? [])
   const [brief, setBrief] = useState<CampaignBrief>(
     campaign?.brief ?? { background: '', strategy: '', deliverables: '', references: '', successCriteria: '' },
   )
@@ -62,7 +63,8 @@ export function CampaignFormDialog({
 
   const save = useMutation({
     mutationFn: async () => {
-      const body: CampaignInput = { ...f, name: f.name.trim(), owner: f.owner || null, platforms, brief }
+      // `team` isn't in CampaignInput; the server takes it on create and edit (campaigns.routes.ts).
+      const body: CampaignInput & { team: string[] } = { ...f, name: f.name.trim(), owner: f.owner || null, platforms, brief, team: members }
       if (campaign) {
         await campaignsApi.update(campaign._id, { ...body, rev: campaign.rev })
         return campaign._id
@@ -143,6 +145,30 @@ export function CampaignFormDialog({
             })}
           </div>
           {errors.platforms && <p className="text-xs text-negative">{errors.platforms}</p>}
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1.5 text-xs font-medium text-text-2">Team</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {team.data?.items
+              .filter((m) => m.user._id !== f.owner)
+              .map((m) => {
+                const on = members.includes(m.user._id)
+                return (
+                  <button
+                    key={m.user._id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setMembers((x) => (on ? x.filter((y) => y !== m.user._id) : [...x, m.user._id]))}
+                    className={cn('h-8 rounded-full border px-3 text-xs', on ? 'border-brand-border bg-green-soft font-medium text-green-ink' : 'border-border-strong bg-white text-text-2 hover:bg-surface')}
+                  >
+                    {m.user.name}
+                  </button>
+                )
+              })}
+            {team.isSuccess && team.data.items.length <= 1 && <p className="text-xs text-text-4">Invite people to your team to add them here.</p>}
+          </div>
+          {errors.team && <p className="text-xs text-negative">{errors.team}</p>}
         </fieldset>
 
         <Section title="Shared with the client">

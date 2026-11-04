@@ -3,16 +3,26 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, CircleDot, ListTodo, Lock, MessageSquare, PenLine, PlayCircle, RotateCcw, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select, Textarea } from '@/components/ui/Field'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { errorMessage } from '@/lib/errors'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
-import { contentApi, type Anchor, type ContentRecord, type Thread, type ThreadStatus } from './api'
+import { contentApi, type Anchor, type ContentRecord, type Message, type Thread, type ThreadStatus } from './api'
 import { useClientPeople } from './useClientPeople'
 import { formatTime, pinLabel, versionLabel } from './labels'
 import { ThreadStatusPill } from './pills'
+import { VoicePlayer, VoiceRecorder, type RecordedVoice } from './VoiceNote'
 
 type Tab = 'client' | 'internal'
+
+const voiceOf = (v: RecordedVoice | null) => (v ? { voice: { file: v.file, durationMs: v.durationMs } } : {})
+
+/** A comment or reply may be text, a voice note, or both (feedback.service `buildMessage`). */
+const postComment = (contentId: string, body: { visibility: Tab; body: string; anchor?: Anchor; voice?: { file: string; durationMs: number } }) =>
+  api<{ thread: Thread }>(`/content/${contentId}/threads`, { body })
+const postReply = (contentId: string, threadId: string, body: { body: string; voice?: { file: string; durationMs: number } }) =>
+  api<{ message: Message }>(`/content/${contentId}/threads/${threadId}/messages`, { body })
 
 /**
  * Feedback on a content item (P53–P63): the client's items and the agency's internal notes in two separate tabs,
@@ -131,15 +141,17 @@ function ThreadCard({ content, thread: t, active, onSelect }: { content: Content
   const people = useClientPeople(content.client._id)
   const [replying, setReplying] = useState(false)
   const [reply, setReply] = useState('')
+  const [replyVoice, setReplyVoice] = useState<RecordedVoice | null>(null)
   const [resolving, setResolving] = useState(false)
   const [note, setNote] = useState('')
   const refresh = () => void qc.invalidateQueries({ queryKey: ['agency', 'content', 'threads', content._id] })
   const writable = !['published', 'cancelled'].includes(content.state)
 
   const send = useMutation({
-    mutationFn: () => contentApi.reply(content._id, t._id, reply.trim()),
+    mutationFn: () => postReply(content._id, t._id, { body: reply.trim(), ...voiceOf(replyVoice) }),
     onSuccess: () => {
       setReply('')
+      setReplyVoice(null)
       setReplying(false)
       refresh()
     },
@@ -186,14 +198,14 @@ function ThreadCard({ content, thread: t, active, onSelect }: { content: Content
             {t.kind === 'feedback' && t.status && <ThreadStatusPill status={t.status} reopened={!!t.reopenedAt} />}
           </span>
           <span className="mt-0.5 block text-[11px] text-text-4">{where(t, content)}</span>
-          {first && <span className="mt-1.5 block text-[13px] whitespace-pre-line text-text">{first.body || (first.voice ? 'Voice note' : '')}</span>}
-          {first?.voice?.transcript && (
-            <span className="mt-1 block rounded bg-surface-input px-2 py-1 text-xs text-text-2">
-              <span className="font-medium">{first.voice.transcriptLabel}:</span> {first.voice.transcript}
-            </span>
-          )}
+          {first?.body && <span className="mt-1.5 block text-[13px] whitespace-pre-line text-text">{first.body}</span>}
         </span>
       </button>
+      {first?.voice && (
+        <div className="pl-8.5">
+          <VoicePlayer voice={first.voice} />
+        </div>
+      )}
 
       {t.status === 'resolved' && (
         <p className="mt-2 rounded-md bg-green-soft px-2.5 py-1.5 text-xs text-green-ink">
@@ -207,7 +219,8 @@ function ThreadCard({ content, thread: t, active, onSelect }: { content: Content
           {replies.map((m) => (
             <li key={m._id} className="text-[13px]">
               <span className="font-medium">{m.author.name}</span> <span className="text-xs text-text-4">{timeAgo(m.createdAt)}</span>
-              <p className="whitespace-pre-line text-text-2">{m.body || 'Voice note'}</p>
+              {m.body && <p className="whitespace-pre-line text-text-2">{m.body}</p>}
+              {m.voice && <VoicePlayer voice={m.voice} />}
             </li>
           ))}
         </ul>
@@ -281,15 +294,18 @@ function ThreadCard({ content, thread: t, active, onSelect }: { content: Content
           className="mt-2 flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            if (reply.trim()) send.mutate()
+            if (reply.trim() || replyVoice) send.mutate()
           }}
         >
           <Textarea autoFocus value={reply} onChange={(e) => setReply(e.target.value)} placeholder={internal ? 'Reply to your team' : 'Reply to the client'} maxLength={5000} className="min-h-16" />
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="mr-auto">
+              <VoiceRecorder client={content.client._id} visibility={t.visibility} value={replyVoice} onChange={setReplyVoice} />
+            </span>
             <Button size="sm" onClick={() => setReplying(false)}>
               Cancel
             </Button>
-            <Button size="sm" variant="primary" type="submit" loading={send.isPending} disabled={!reply.trim()}>
+            <Button size="sm" variant="primary" type="submit" loading={send.isPending} disabled={!reply.trim() && !replyVoice}>
               <Send size={13} /> Reply
             </Button>
           </div>
@@ -318,11 +334,13 @@ function Composer({
 }) {
   const qc = useQueryClient()
   const [body, setBody] = useState('')
+  const [voice, setVoice] = useState<RecordedVoice | null>(null)
   const internal = visibility === 'internal'
   const post = useMutation({
-    mutationFn: () => contentApi.comment(content._id, { visibility, body: body.trim(), ...(draft?.shapes?.length ? { anchor: draft } : {}) }),
+    mutationFn: () => postComment(content._id, { visibility, body: body.trim(), ...(draft?.shapes?.length ? { anchor: draft } : {}), ...voiceOf(voice) }),
     onSuccess: () => {
       setBody('')
+      setVoice(null)
       onClearDraft()
       onAnnotate(false)
       void qc.invalidateQueries({ queryKey: ['agency', 'content', 'threads', content._id] })
@@ -331,8 +349,9 @@ function Composer({
   })
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (body.trim()) post.mutate()
+    if (body.trim() || voice) post.mutate()
   }
+  const ready = !!body.trim() || !!voice
 
   if (disabledReason) return <p className="border-t border-border px-4 py-3 text-xs text-text-3">{disabledReason}</p>
 
@@ -370,19 +389,22 @@ function Composer({
       />
       {post.isError && <p className="text-xs text-negative">{errorMessage(post.error)}</p>}
       <div className="flex items-center justify-between gap-2">
-        <Button size="sm" variant={annotating ? 'primary' : 'secondary'} onClick={() => onAnnotate(!annotating)} aria-pressed={annotating}>
-          <PenLine size={13} /> {annotating ? 'Drawing…' : 'Draw on creative'}
-        </Button>
+        <span className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant={annotating ? 'primary' : 'secondary'} onClick={() => onAnnotate(!annotating)} aria-pressed={annotating}>
+            <PenLine size={13} /> {annotating ? 'Drawing…' : 'Draw on creative'}
+          </Button>
+          <VoiceRecorder client={content.client._id} visibility={visibility} value={voice} onChange={setVoice} />
+        </span>
         {internal ? (
           <button
             type="submit"
-            disabled={!body.trim() || post.isPending}
+            disabled={!ready || post.isPending}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-ink px-3 text-xs font-medium text-white hover:enabled:bg-[#3d39a8] disabled:opacity-55"
           >
             <Lock size={13} /> Add note
           </button>
         ) : (
-          <Button size="sm" variant="primary" type="submit" loading={post.isPending} disabled={!body.trim()}>
+          <Button size="sm" variant="primary" type="submit" loading={post.isPending} disabled={!ready}>
             <Send size={13} /> Send
           </Button>
         )}

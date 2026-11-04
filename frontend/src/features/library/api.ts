@@ -15,6 +15,8 @@ export interface LibraryFile {
   size: number
   status: 'uploading' | 'processing' | 'ready' | 'failed'
   category: FileCategory
+  /** The collection the file is filed in, if any (a file is in at most one). */
+  collection: string | null
   /** `client` files are shared with the client; `internal` ones only with the team. */
   visibility: 'internal' | 'client'
   uploadedBy?: { id: string; name: string; side: 'agency' | 'client' }

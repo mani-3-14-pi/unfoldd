@@ -34,7 +34,8 @@ export interface BannerInput {
   headline: string
   text?: string
   image?: string | null
-  cta?: { label: string; link: string }
+  /** null removes the button. */
+  cta?: { label: string; link: string } | null
   startAt?: string | null
   endAt?: string | null
 }

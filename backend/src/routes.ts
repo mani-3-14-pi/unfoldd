@@ -31,6 +31,7 @@ import { filesRouter } from './modules/files/files.routes.ts'
 import { healthRouter } from './modules/health/health.routes.ts'
 import { invitationsPublicRouter } from './modules/invitations/invitations.public.routes.ts'
 import { notificationsRouter } from './modules/notifications/notifications.routes.ts'
+import { searchRouter } from './modules/search/search.routes.ts'
 import { settingsAdminRouter } from './modules/settings/settings.admin.routes.ts'
 import { tasksRouter } from './modules/tasks/tasks.routes.ts'
 import { teamRouter } from './modules/team/team.routes.ts'
@@ -79,6 +80,7 @@ apiRouter.use('/client', requireClientUser, clientSpaceRouter)
 
 // Shared by both apps; scoped to whichever one the session is in
 apiRouter.use('/files', requireUser, filesRouter)
+apiRouter.use('/search', requireUser, searchRouter)
 apiRouter.use('/notifications', requireUser, notificationsRouter)
 apiRouter.use('/me', requireUser, accountRouter)
 apiRouter.use('/support', requireUser, supportRouter)

@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Ban, CalendarClock, CheckCircle2, Clock, EllipsisVertical, ExternalLink, Hammer, Pencil, RotateCcw, Send, ThumbsDown, Upload } from 'lucide-react'
+import { Ban, CalendarClock, CheckCircle2, Clock, EllipsisVertical, ExternalLink, Hammer, ListChecks, Pencil, RotateCcw, Send, ThumbsDown, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
 import { isManagerPlus } from '@/features/agency/roles'
 import { useAgencySession } from '@/features/agency/session'
+import { templatesApi } from '@/features/templates/api'
 import { cn } from '@/lib/cn'
 import { errorMessage, fieldErrors } from '@/lib/errors'
 import { toast } from '@/lib/toast'
@@ -14,7 +15,7 @@ import { formatInZone, isoToZonedInput, zonedInputToIso } from '@/lib/zonedTime'
 import { contentApi, type ContentRecord } from './api'
 import { canCancelIn, canUploadIn, versionLabel } from './labels'
 
-type DialogKind = 'request_changes' | 'send' | 'resend' | 'schedule' | 'published' | 'cancel'
+type DialogKind = 'request_changes' | 'send' | 'resend' | 'schedule' | 'published' | 'cancel' | 'task_list'
 
 /**
  * The next steps for this content, from its state (§6.1). Each button maps to one server transition; the server
@@ -178,6 +179,7 @@ export function ContentActions({ content: c, onChanged, onUpload, onEdit }: { co
 
   const more: MenuItem[] = [
     ...(!['published', 'cancelled'].includes(c.state) ? [{ label: 'Edit details', icon: Pencil, onSelect: onEdit }] : []),
+    ...(!['published', 'cancelled'].includes(c.state) ? [{ label: 'Apply a task list', icon: ListChecks, onSelect: () => setDialog('task_list') }] : []),
     ...(canUploadIn.includes(c.state) && !['planned', 'in_production', 'changes_requested', 'client_review'].includes(c.state)
       ? [{ label: `Upload ${next}`, icon: Upload, onSelect: onUpload }]
       : []),
@@ -238,6 +240,7 @@ export function ContentActions({ content: c, onChanged, onUpload, onEdit }: { co
       {dialog === 'send' && <SendDialog content={c} onClose={() => setDialog(null)} onDone={onChanged} />}
       {dialog === 'schedule' && <ScheduleDialog content={c} onClose={() => setDialog(null)} onDone={onChanged} />}
       {dialog === 'published' && <PublishedDialog content={c} onClose={() => setDialog(null)} onDone={onChanged} />}
+      {dialog === 'task_list' && <TaskListDialog content={c} onClose={() => setDialog(null)} onDone={onChanged} />}
     </div>
   )
 }
@@ -445,6 +448,64 @@ function PublishedDialog({ content: c, onClose, onDone }: { content: ContentReco
         <Input id="pub-url" type="url" autoFocus placeholder="https://www.instagram.com/p/…" value={url} onChange={(e) => setUrl(e.target.value)} aria-invalid={!!errors.url} />
       </Field>
       {m.isError && Object.keys(errors).length === 0 && <p className="mt-2 text-[13px] text-negative">{errorMessage(m.error)}</p>}
+    </Dialog>
+  )
+}
+
+/**
+ * P44/D55: generate a task-list (or content) template's production tasks for this content. Due dates count
+ * from the anchor date: the production deadline by default.
+ */
+function TaskListDialog({ content: c, onClose, onDone }: { content: ContentRecord; onClose: () => void; onDone: () => void }) {
+  const templates = useQuery({ queryKey: ['agency', 'templates', 'task_list,content'], queryFn: () => templatesApi.list('type=task_list,content&pageSize=100') })
+  const [id, setId] = useState('')
+  const [anchor, setAnchor] = useState(c.due)
+  const m = useMutation({
+    mutationFn: () => templatesApi.apply(id, c._id, anchor || undefined),
+    onSuccess: ({ tasks }) => {
+      toast(tasks.length === 1 ? 'Added 1 task' : `Added ${tasks.length} tasks`)
+      onDone()
+      onClose()
+    },
+  })
+  const errors = fieldErrors(m.error)
+  const items = templates.data?.items ?? []
+  return (
+    <Dialog
+      title="Apply a task list"
+      description="Adds the template's production tasks to this content, owned by its owner."
+      onClose={onClose}
+      size="sm"
+      footer={
+        <>
+          <Button onClick={onClose}>Back</Button>
+          <Button variant="primary" loading={m.isPending} disabled={!id} onClick={() => m.mutate()}>
+            Add tasks
+          </Button>
+        </>
+      }
+    >
+      {templates.isSuccess && items.length === 0 ? (
+        <p className="text-[13px] text-text-3">No task-list templates yet. Create one under Templates.</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <Field label="Template" htmlFor="tl-template" error={errors.template}>
+            <Select id="tl-template" value={id} onChange={(e) => setId(e.target.value)} disabled={templates.isPending} autoFocus>
+              <option value="">Choose a template…</option>
+              {items.map((t) => (
+                <option key={t._id} value={t._id}>
+                  {t.name}
+                  {t.type === 'content' ? ' (content template)' : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Count due dates from" htmlFor="tl-anchor" error={errors.anchor} hint="Leave empty to count from today.">
+            <Input id="tl-anchor" type="date" value={anchor} onChange={(e) => setAnchor(e.target.value)} />
+          </Field>
+          {m.isError && Object.keys(errors).length === 0 && <p className="text-[13px] text-negative">{errorMessage(m.error)}</p>}
+        </div>
+      )}
     </Dialog>
   )
 }

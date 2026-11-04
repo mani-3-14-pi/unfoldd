@@ -90,6 +90,11 @@ export function ClientLibrary({ client }: { client: ClientDetail }) {
     },
     { key: 'category', header: 'Category', cell: (f) => <span className="text-text-2">{categoryLabel[f.category]}</span> },
     {
+      key: 'collection',
+      header: 'Collection',
+      cell: (f) => <span className="text-text-2">{overview.data?.collections.find((c) => c._id === f.collection)?.name ?? '—'}</span>,
+    },
+    {
       key: 'visibility',
       header: 'Shared',
       cell: (f) => (f.visibility === 'client' ? <Pill tone="green">With client</Pill> : <Pill tone="gray">Team only</Pill>),
@@ -351,9 +356,9 @@ function CollectionDialog({ clientId, collection, onClose, onSaved }: { clientId
 
 function FileDialog({ clientId, file, collections, onClose, onSaved }: { clientId: string; file: LibraryFile; collections: Collection[]; onClose: () => void; onSaved: () => void }) {
   const [category, setCategory] = useState<FileCategory>(file.category)
-  const [collection, setCollection] = useState('')
+  const [collection, setCollection] = useState(file.collection ?? 'none')
   const m = useMutation({
-    mutationFn: () => libraryApi.organise(clientId, file.id, { category, ...(collection ? { collection: collection === 'none' ? null : collection } : {}) }),
+    mutationFn: () => libraryApi.organise(clientId, file.id, { category, collection: collection === 'none' ? null : collection }),
     onSuccess: () => {
       toast(`${file.name} filed`)
       onSaved()
@@ -387,7 +392,6 @@ function FileDialog({ clientId, file, collections, onClose, onSaved }: { clientI
         </Field>
         <Field label="Collection" htmlFor="file-col" hint="A file is in at most one collection.">
           <Select id="file-col" value={collection} onChange={(e) => setCollection(e.target.value)}>
-            <option value="">Keep as it is</option>
             <option value="none">No collection</option>
             {collections.map((c) => (
               <option key={c._id} value={c._id}>

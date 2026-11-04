@@ -25,8 +25,9 @@ export function AgencyLoginPage() {
   const finish = (result: SignedIn) => {
     qc.clear()
     const next = safeNext(params.get('next'))
-    // `next` belongs to the portal it was saved in; a client-space login goes to the client app.
-    navigate(result.context === 'agency' && next?.startsWith('/app') ? next : homeFor(result.context), { replace: true })
+    // `next` belongs to the app it was saved in: /app for the agency portal, /c for the client app.
+    const prefix = result.context === 'agency' ? '/app' : '/c'
+    navigate(next?.startsWith(prefix) ? next : homeFor(result.context), { replace: true })
   }
 
   const login = useMutation({

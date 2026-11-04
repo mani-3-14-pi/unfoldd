@@ -6,3 +6,8 @@ dist
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# End-to-end test output
+e2e/.tmp
+test-results
+playwright-report

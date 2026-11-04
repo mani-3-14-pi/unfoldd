@@ -634,6 +634,12 @@ All paths start with `/api`. Request bodies are JSON. Errors look like `{ "error
 | DELETE | `/api/client/requests/:id/files/:fileId` | client | Only files not yet submitted can be removed; submitted ones may already be in use (§6.6). |
 | POST | `/api/client/requests/:id/submit` | client | Submit with files and/or a reply |
 
+#### [backend/src/modules/search/search.routes.ts](../backend/src/modules/search/search.routes.ts)
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/api/search` | agency+client | Search (P148–P150): `q` (2+ chars), optional `types` and `limit`. Grouped results with links, scoped like the lists: Managers/Members only their clients, client people only what was shared with them. |
+
 #### [backend/src/modules/settings/settings.admin.routes.ts](../backend/src/modules/settings/settings.admin.routes.ts)
 
 | Method | Path | Who | What it does |

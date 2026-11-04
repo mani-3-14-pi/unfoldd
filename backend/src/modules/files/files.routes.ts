@@ -47,6 +47,7 @@ const present = (f: Record<string, any>) => ({
   status: f.status,
   error: f.error || undefined,
   category: f.category,
+  collection: f.collectionId ?? null,
   visibility: f.visibility,
   uploadedBy: f.uploadedBy,
   createdAt: f.createdAt,

@@ -29,6 +29,7 @@ import { Navigate, useLocation } from 'react-router'
 import { Menu } from '@/components/ui/Menu'
 import { sessionApi, sessionKey, type AgencySession } from '@/features/agency/api'
 import { ContextSwitcher } from '@/features/agency/ContextSwitcher'
+import { SearchButton } from '@/features/search/SearchButton'
 import { agencyRoleLabel } from '@/features/agency/roles'
 import { AgencySessionContext, useSessionActions } from '@/features/agency/session'
 import { unreadKey, workspaceApi } from '@/features/workspace/api'
@@ -78,7 +79,12 @@ function Shell({ session: s }: { session: AgencySession }) {
       product="AGENCY PORTAL"
       mobileTitle={s.agency.name}
       banner={s.support && <SupportBanner session={s} onExit={() => void logout(true)} />}
-      header={<ContextSwitcher current={{ agencyId: s.agency.id }} label={s.agency.name} contexts={s.contexts} />}
+      header={
+        <div className="flex flex-col gap-2">
+          <ContextSwitcher current={{ agencyId: s.agency.id }} label={s.agency.name} contexts={s.contexts} />
+          <SearchButton />
+        </div>
+      }
       groups={[
         {
           label: 'Workspace',

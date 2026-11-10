@@ -1,11 +1,36 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router'
 import { cn } from '@/lib/cn'
 
 /** Underlined section tabs that are routes (`/clients/:id/members`), so each tab has its own URL. */
 export function TabNav({ label, tabs }: { label: string; tabs: { to: string; label: string; count?: ReactNode }[] }) {
+  const ref = useRef<HTMLElement>(null)
+  // True while tabs are hidden past the right edge; the edge then fades to show there's more to scroll to.
+  const [more, setMore] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const check = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    check()
+    el.addEventListener('scroll', check, { passive: true })
+    const observer = new ResizeObserver(check)
+    observer.observe(el)
+    return () => {
+      el.removeEventListener('scroll', check)
+      observer.disconnect()
+    }
+  }, [tabs.length])
+
   return (
-    <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-border" aria-label={label}>
+    <nav
+      ref={ref}
+      className={cn(
+        'mb-5 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:thin]',
+        more && '[mask-image:linear-gradient(to_right,black_calc(100%-48px),transparent)]',
+      )}
+      aria-label={label}
+    >
       {tabs.map((t) => (
         <NavLink
           key={t.to}

@@ -3,8 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, CornerDownRight, MessageSquare, PenLine, RotateCcw, Send, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Field'
+import { useClientSession } from '@/features/agency/session'
 import type { Anchor, Thread } from '@/features/content/api'
 import { formatTime, pinLabel, versionLabel } from '@/features/content/labels'
+import { VoicePlayer, VoiceRecorder, type RecordedVoice } from '@/features/content/VoiceNote'
 import { cn } from '@/lib/cn'
 import { errorMessage } from '@/lib/errors'
 import { timeAgo } from '@/lib/format'
@@ -21,15 +23,17 @@ function where(t: Thread, slides: Record<string, number>) {
   return parts.join(' · ')
 }
 
+const voiceOf = (v: RecordedVoice | null) => (v ? { voice: { file: v.file, durationMs: v.durationMs } } : {})
+
 const statusText = (t: Thread) =>
   t.status === 'resolved' ? 'Resolved' : t.status === 'in_progress' ? 'In progress' : t.reopenedAt ? 'Reopened' : 'Open'
 const statusClass = (t: Thread) =>
   t.status === 'resolved' ? 'bg-green-soft text-green-ink' : t.status === 'in_progress' ? 'bg-blue-soft text-blue-ink' : 'bg-amber-soft text-amber-ink'
 
 /**
- * The client's side of feedback (F24–F37). New comments are drafts in the person's pending review (D14): only
- * they see them, and they can edit or discard them until they send feedback or decide. Replies to existing
- * threads post at once.
+ * The client's side of feedback (F24–F37). New comments, written or as a voice note, are drafts in the person's
+ * pending review (D14): only they see them, and they can edit or discard them until they send feedback or decide.
+ * Replies to existing threads post at once.
  */
 export function ReviewFeedback({
   content: c,
@@ -120,11 +124,14 @@ function Composer({
   slides: Record<string, number>
 }) {
   const qc = useQueryClient()
+  const clientId = useClientSession().client.id
   const [body, setBody] = useState('')
+  const [voice, setVoice] = useState<RecordedVoice | null>(null)
   const add = useMutation({
-    mutationFn: () => clientContentApi.addDraft(c.id, { versionId: c.version!._id, body: body.trim(), ...(draft?.shapes?.length ? { anchor: draft } : {}) }),
+    mutationFn: () => clientContentApi.addDraft(c.id, { versionId: c.version!._id, body: body.trim(), ...(draft?.shapes?.length ? { anchor: draft } : {}), ...voiceOf(voice) }),
     onSuccess: () => {
       setBody('')
+      setVoice(null)
       onClearDraft()
       onAnnotate(false)
       void qc.invalidateQueries({ queryKey: clientThreadsKey(c.id) })
@@ -132,8 +139,9 @@ function Composer({
   })
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (body.trim()) add.mutate()
+    if (body.trim() || voice) add.mutate()
   }
+  const ready = !!body.trim() || !!voice
   const slide = draft?.versionFile ? slides[draft.versionFile] : undefined
 
   return (
@@ -149,15 +157,18 @@ function Composer({
       ) : null}
       <Textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={5000} placeholder="What would you like changed?" aria-label="Your comment" className="min-h-20 text-[15px]" />
       {add.isError && <p className="text-xs text-negative">{errorMessage(add.error)}</p>}
-      <div className="flex items-center justify-between gap-2">
-        <Button variant={annotating ? 'primary' : 'secondary'} onClick={() => onAnnotate(!annotating)} aria-pressed={annotating} className="h-10">
-          <PenLine size={15} /> {annotating ? 'Drawing…' : 'Draw on it'}
-        </Button>
-        <Button type="submit" variant="primary" loading={add.isPending} disabled={!body.trim()} className="h-10">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex flex-wrap items-center gap-2">
+          <Button variant={annotating ? 'primary' : 'secondary'} onClick={() => onAnnotate(!annotating)} aria-pressed={annotating} className="h-10">
+            <PenLine size={15} /> {annotating ? 'Drawing…' : 'Draw on it'}
+          </Button>
+          <VoiceRecorder client={clientId} visibility="client" value={voice} onChange={setVoice} />
+        </span>
+        <Button type="submit" variant="primary" loading={add.isPending} disabled={!ready} className="h-10">
           <MessageSquare size={15} /> Add comment
         </Button>
       </div>
-      <p className="text-[11px] text-text-4">Comments are saved as drafts. The agency gets them all at once when you send feedback, approve or request changes.</p>
+      <p className="text-[11px] text-text-4">Comments and voice notes are saved as drafts. The agency gets them all at once when you send feedback, approve or request changes.</p>
     </form>
   )
 }
@@ -214,7 +225,8 @@ function DraftCard({ content: c, thread: t, currentVersion, slides }: { content:
         </form>
       ) : (
         <>
-          <p className="text-[15px] whitespace-pre-line">{t.messages[0]?.body}</p>
+          {t.messages[0]?.body && <p className="text-[15px] whitespace-pre-line">{t.messages[0].body}</p>}
+          {t.messages[0]?.voice && <VoicePlayer voice={t.messages[0].voice} />}
           {where(t, slides) && <p className="mt-1 text-xs text-text-4">{where(t, slides)}</p>}
           <div className="mt-2 flex flex-wrap gap-1.5">
             {stale ? (
@@ -259,14 +271,17 @@ function ThreadCard({
   onSelect: () => void
 }) {
   const qc = useQueryClient()
+  const clientId = useClientSession().client.id
   const [replying, setReplying] = useState(false)
   const [text, setText] = useState('')
+  const [voice, setVoice] = useState<RecordedVoice | null>(null)
   const refresh = () => void qc.invalidateQueries({ queryKey: clientThreadsKey(c.id) })
   const onError = (err: unknown) => toast(errorMessage(err), 'error')
   const reply = useMutation({
-    mutationFn: () => clientContentApi.reply(c.id, t._id, text.trim()),
+    mutationFn: () => clientContentApi.reply(c.id, t._id, { body: text.trim(), ...voiceOf(voice) }),
     onSuccess: () => {
       setText('')
+      setVoice(null)
       setReplying(false)
       refresh()
     },
@@ -300,14 +315,14 @@ function ThreadCard({
               {[t.versionNumber && t.version !== c.version?._id ? `on ${versionLabel(t.versionNumber)}` : '', where(t, slides)].filter(Boolean).join(' · ')}
             </span>
           )}
-          {first && <span className="mt-1.5 block text-[15px] whitespace-pre-line">{first.body || (first.voice ? 'Voice note' : '')}</span>}
-          {first?.voice?.transcript && (
-            <span className="mt-1.5 block rounded-lg bg-surface-input px-2.5 py-1.5 text-xs text-text-2">
-              <span className="font-medium">{first.voice.transcriptLabel ?? 'Auto-transcript'}:</span> {first.voice.transcript}
-            </span>
-          )}
+          {first?.body && <span className="mt-1.5 block text-[15px] whitespace-pre-line">{first.body}</span>}
         </span>
       </button>
+      {first?.voice && (
+        <div className="pl-9.5">
+          <VoicePlayer voice={first.voice} />
+        </div>
+      )}
 
       {/* F37: what the agency did about it. */}
       {t.status === 'resolved' && (
@@ -326,7 +341,8 @@ function ThreadCard({
                 {m.author.side === 'agency' ? 'Agency · ' : ''}
                 {timeAgo(m.createdAt)}
               </span>
-              <p className="whitespace-pre-line text-text-2">{m.body || 'Voice note'}</p>
+              {m.body && <p className="whitespace-pre-line text-text-2">{m.body}</p>}
+              {m.voice && <VoicePlayer voice={m.voice} />}
             </li>
           ))}
         </ul>
@@ -349,15 +365,18 @@ function ThreadCard({
           className="mt-2 flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            if (text.trim()) reply.mutate()
+            if (text.trim() || voice) reply.mutate()
           }}
         >
           <Textarea value={text} onChange={(e) => setText(e.target.value)} autoFocus maxLength={5000} placeholder="Your reply (sent straight away)" className="min-h-16 text-[15px]" />
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="mr-auto">
+              <VoiceRecorder client={clientId} visibility="client" value={voice} onChange={setVoice} />
+            </span>
             <Button size="sm" onClick={() => setReplying(false)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" variant="primary" loading={reply.isPending} disabled={!text.trim()}>
+            <Button size="sm" type="submit" variant="primary" loading={reply.isPending} disabled={!text.trim() && !voice}>
               <Send size={13} /> Reply
             </Button>
           </div>

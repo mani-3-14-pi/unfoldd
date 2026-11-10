@@ -8,7 +8,9 @@ import { csvEnum, pageQuery, paginateAggregate } from '../../lib/pagination.ts'
 import { scopeFilter } from '../../lib/scope.ts'
 import { AppError, invalid, notFound } from '../../utils/AppError.ts'
 import { AgencyAccessModel } from '../clients/agencyAccess.model.ts'
+import { contentTeam, clientPeople } from '../content/content.recipients.ts'
 import { loadContent } from '../content/content.routes.ts'
+import type { ContentDoc } from '../content/content.service.ts'
 import { VersionModel } from '../content/version.model.ts'
 import { MembershipModel } from '../users/membership.model.ts'
 import { anchorSchema, createThread, messageInput, reply } from './feedback.service.ts'
@@ -64,7 +66,13 @@ async function assignable(req: Request, client: Types.ObjectId, id: string | nul
 }
 
 const createSchema = z.object({
-  visibility: z.enum(['internal', 'client']),
+  /** Who the comment is for. With `client` it's visible to the client (the team always sees it too). */
+  sendTo: z
+    .object({ team: z.boolean(), client: z.boolean() })
+    .refine((t) => t.team || t.client, 'Pick the team, the client or both')
+    .optional(),
+  /** Older callers pick the visibility directly instead of `sendTo`. */
+  visibility: z.enum(['internal', 'client']).optional(),
   kind: z.enum(['feedback', 'discussion']).default('feedback'),
   /** Defaults to the current version. */
   versionId: z.string().optional(),
@@ -76,27 +84,42 @@ const createSchema = z.object({
 /** Agency comments are posted at once. Internal ones (P50) are never visible to the client (D20). */
 feedbackRouter.post('/:id/threads', async (req, res) => {
   const input = createSchema.parse(req.body)
+  const visibility = input.sendTo ? (input.sendTo.client ? 'client' : 'internal') : input.visibility
+  if (!visibility) throw invalid('sendTo', 'Pick the team, the client or both')
   const content = await loadContent(req, req.params.id, 'write')
   const versionId = input.versionId ? objectId(input.versionId, 'Version not found.') : content.currentVersion
   if (!versionId) throw new AppError(409, 'no_version', 'Upload a version first.')
   const version = await VersionModel.findOne({ _id: versionId, content: content._id }, { number: 1 }).lean()
   if (!version) throw notFound('Version not found.')
   if (String(versionId) !== String(content.currentVersion)) throw new AppError(409, 'not_current_version', 'Comments go on the current version only.')
-  if (input.visibility === 'client' && !content.clientVisibleAt) throw new AppError(409, 'not_sent', 'The client can’t see this content yet. Use an internal note.')
+  if (visibility === 'client' && !content.clientVisibleAt) throw new AppError(409, 'not_sent', 'The client can’t see this content yet. Send it to your team only.')
 
   const thread = await createThread(req, {
     content,
     versionId,
     versionNumber: version.number,
-    visibility: input.visibility,
+    visibility,
     kind: input.kind,
     anchor: input.anchor,
     message: input,
     draft: false,
     assignee: await assignable(req, content.client, input.assignee),
   })
+  if (input.sendTo) await notifyComment(req, content, input.sendTo)
   res.status(201).json({ thread })
 })
+
+/** Tells the people the comment was sent to. Whoever wrote it is never notified. */
+async function notifyComment(req: Request, content: ContentDoc, sendTo: { team: boolean; client: boolean }) {
+  const me = req.agencyAuth!.user
+  const base = { agency: content.agency, client: content.client, category: 'feedback' as const, event: 'feedback.comment', entity: { type: 'content', id: content._id }, except: me._id }
+  if (sendTo.team) {
+    await notify({ ...base, recipients: await contentTeam(content), audience: 'agency', title: `${me.name} commented on ${content.title}`, link: `/app/content/${content._id}` })
+  }
+  if (sendTo.client) {
+    await notify({ ...base, recipients: await clientPeople(content.client), audience: 'client', title: `${me.name} left a comment on ${content.title}`, link: `/c/content/${content._id}` })
+  }
+}
 
 const replySchema = z.object(messageInput)
 

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, CreditCard, Ellipsis, LayoutDashboard, LoaderCircle, LogOut, ScrollText, Settings, UserCheck } from 'lucide-react'
+import { Building2, CreditCard, Ellipsis, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, ScrollText, Settings, UserCheck } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { Menu } from '@/components/ui/Menu'
 import { adminApi, adminMeKey } from '@/features/admin/api'
@@ -16,6 +16,7 @@ export function AdminLayout() {
   const me = useQuery({ queryKey: adminMeKey, queryFn: adminApi.me, retry: false, staleTime: 5 * 60_000 })
   const overview = useQuery({ queryKey: ['admin', 'overview'], queryFn: adminApi.overview, enabled: me.isSuccess, staleTime: 30_000 })
   const pending = overview.data?.agencies.byStatus.pending ?? 0
+  const openTickets = overview.data?.support.open ?? 0
 
   if (me.isPending) {
     return (
@@ -50,6 +51,7 @@ export function AdminLayout() {
             { label: 'Overview', to: '/admin', icon: LayoutDashboard, end: true },
             { label: 'Agencies', to: '/admin/agencies', icon: Building2 },
             { label: 'Approvals', to: '/admin/approvals', icon: UserCheck, badge: { count: pending, label: 'agencies waiting for approval' } },
+            { label: 'Support', to: '/admin/support', icon: LifeBuoy, badge: { count: openTickets, label: 'support tickets waiting for an answer' } },
             { label: 'Subscriptions', to: '/admin/subscriptions', icon: CreditCard },
             { label: 'Activity log', to: '/admin/activity', icon: ScrollText },
           ],

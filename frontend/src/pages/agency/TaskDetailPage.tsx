@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Check, EllipsisVertical, Link2, Pencil, Send, Trash2, Unlock } from 'lucide-react'
+import { Ban, Check, EllipsisVertical, Link2, Pencil, Plus, Send, Trash2, Unlock, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -8,14 +8,15 @@ import { Card, EmptyState } from '@/components/ui/Card'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Details } from '@/components/ui/Details'
 import { Dialog } from '@/components/ui/Dialog'
-import { Field, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
 import { isManagerPlus } from '@/features/agency/roles'
 import { useAgencySession } from '@/features/agency/session'
+import { campaignKey, campaignsApi } from '@/features/campaigns/api'
 import { clientsApi } from '@/features/clients/api'
 import { priorityLabel } from '@/features/content/labels'
 import { useClientPeople } from '@/features/content/useClientPeople'
-import { BOARD_STATUSES, taskKey, tasksApi, type Dependency, type TaskDetail, type TaskStatus } from '@/features/tasks/api'
+import { BOARD_STATUSES, taskKey, tasksApi, type Dependency, type Subtask, type TaskDetail, type TaskStatus } from '@/features/tasks/api'
 import { isOverdue, taskSourceLabel, taskStatusLabel, todayString } from '@/features/tasks/labels'
 import { BlockedBadge, TaskStatusPill } from '@/features/tasks/pills'
 import { TaskFormDialog } from '@/features/tasks/TaskFormDialog'
@@ -119,6 +120,7 @@ export function TaskDetailPage() {
           <Card title="Details" action={<Button size="sm" onClick={() => setDialog('edit')}><Pencil size={13} /> Edit</Button>}>
             <TaskDetails task={t} overdue={isOverdue(t, today)} />
           </Card>
+          <Subtasks key={t.rev} task={t} onSaved={refresh} />
           <Comments taskId={t._id} />
         </div>
         <div className="flex flex-col gap-6">
@@ -182,6 +184,7 @@ function TaskDetails({ task: t, overdue }: { task: TaskDetail; overdue: boolean 
         { label: 'Owner', value: name(t.owner) || 'No one' },
         { label: 'Due', value: t.due ? <span className={overdue ? 'font-medium text-negative' : undefined}>{formatDate(t.due)}{overdue ? ' · overdue' : ''}</span> : '' },
         { label: 'Priority', value: priorityLabel[t.priority] },
+        { label: 'Campaign', value: t.campaign && <CampaignLink id={t.campaign} /> },
         {
           label: 'Came from',
           value: (
@@ -202,6 +205,86 @@ function TaskDetails({ task: t, overdue }: { task: TaskDetail; overdue: boolean 
         ...(t.completedAt ? [{ label: 'Done', value: formatDateTime(t.completedAt) }] : []),
       ]}
     />
+  )
+}
+
+function CampaignLink({ id }: { id: string }) {
+  const campaign = useQuery({ queryKey: campaignKey(id), queryFn: () => campaignsApi.get(id), retry: false })
+  return (
+    <Link to={`/app/campaigns/${id}`} className="text-brand hover:underline">
+      {campaign.data?.campaign.name ?? 'Open the campaign'}
+    </Link>
+  )
+}
+
+/** The steps inside the task. Each change saves the whole list (with `rev`), so two people can't overwrite each other. */
+function Subtasks({ task: t, onSaved }: { task: TaskDetail; onSaved: () => void }) {
+  const qc = useQueryClient()
+  const [items, setItems] = useState<Subtask[]>(t.subtasks ?? [])
+  const [title, setTitle] = useState('')
+  const save = useMutation({
+    mutationFn: (next: Subtask[]) => tasksApi.update(t._id, { rev: t.rev, subtasks: next }),
+    onMutate: (next) => setItems(next),
+    onSuccess: ({ task }) => {
+      // Take the new rev at once, so the next tick doesn't race the refetch.
+      qc.setQueryData<{ task: TaskDetail }>(taskKey(t._id), (old) => old && { task: { ...old.task, ...task } })
+      onSaved()
+    },
+    onError: (err) => {
+      setItems(t.subtasks ?? [])
+      toast(errorMessage(err), 'error')
+    },
+  })
+  const doneCount = items.filter((x) => x.done).length
+  const add = () => {
+    if (!title.trim()) return
+    save.mutate([...items, { title: title.trim(), done: false }])
+    setTitle('')
+  }
+
+  return (
+    <Card title="Checklist" description={items.length ? `${doneCount} of ${items.length} done` : 'Break the task into steps and tick them off.'}>
+      <div className="flex flex-col gap-1 px-5 py-4">
+        {items.length > 0 && (
+          <ul className="mb-2 flex flex-col">
+            {items.map((x, i) => (
+              <li key={x._id ?? `new-${i}`} className="group flex items-center gap-2.5 rounded-md px-1.5 py-1 hover:bg-surface-input">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-brand"
+                  checked={x.done}
+                  aria-label={x.title}
+                  disabled={save.isPending}
+                  onChange={() => save.mutate(items.map((y, j) => (j === i ? { ...y, done: !y.done } : y)))}
+                />
+                <span className={cn('flex-1 text-[13px]', x.done && 'text-text-4 line-through')}>{x.title}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${x.title}`}
+                  disabled={save.isPending}
+                  onClick={() => save.mutate(items.filter((_, j) => j !== i))}
+                  className="grid size-6 place-items-center rounded text-text-4 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-black/5"
+                >
+                  <X size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            add()
+          }}
+        >
+          <Input aria-label="New step" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} placeholder="Add a step…" />
+          <Button type="submit" size="sm" disabled={!title.trim() || save.isPending}>
+            <Plus size={13} /> Add
+          </Button>
+        </form>
+      </div>
+    </Card>
   )
 }
 

@@ -2,13 +2,16 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlarmClock, CalendarCheck, ClipboardCheck, Hammer, Hourglass, ThumbsDown, TriangleAlert } from 'lucide-react'
 import { Link } from 'react-router'
-import { Card, EmptyState, StatCard } from '@/components/ui/Card'
+import { EmptyState, StatCard } from '@/components/ui/Card'
 import { Pill } from '@/components/ui/Pill'
 import { Switch } from '@/components/ui/Switch'
 import { useAgencySession } from '@/features/agency/session'
 import { HealthPill } from '@/features/clients/pills'
 import { dashboardApi, dashboardKey, type Dashboard } from '@/features/dashboard/api'
+import { DashCard } from '@/features/dashboard/DashCard'
 import { GetStarted } from '@/features/dashboard/GetStarted'
+import { UpcomingContent, UpcomingMeetings } from '@/features/dashboard/Upcoming'
+import { useLiveDashboard } from '@/features/dashboard/useLiveDashboard'
 import { attentionLabel, severityTone, workloadLabel, workloadTone } from '@/features/dashboard/labels'
 import { versionLabel } from '@/features/content/labels'
 import { cn } from '@/lib/cn'
@@ -22,14 +25,27 @@ import { formatDate, timeAgo } from '@/lib/format'
 export function DashboardPage() {
   const s = useAgencySession()
   const [mine, setMine] = useState(false)
-  const query = useQuery({ queryKey: dashboardKey(mine), queryFn: () => dashboardApi.get(mine), refetchInterval: 60_000 })
+  // No polling: the server pushes a change event and the dashboard refetches (useLiveDashboard).
+  const query = useQuery({ queryKey: dashboardKey(mine), queryFn: () => dashboardApi.get(mine) })
+  useLiveDashboard()
 
   return (
     <>
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[13px] text-text-3">{s.agency.name}</p>
-          <h1 className="mt-1 font-serif text-4xl text-brand">Welcome, {s.user.name.split(' ')[0]}</h1>
+          <h1>
+            <span className="block text-xs font-semibold tracking-[0.06em] text-text-2 uppercase">
+              {greeting()}! Welcome, {s.user.name.split(' ')[0]}
+            </span>
+            <span className="mt-2 block font-display text-[34px] leading-[1.08] font-extrabold tracking-[-0.03em] sm:text-[44px]">
+              Here’s what’s
+              <br />
+              happening <span className="text-brand-hover">today.</span>
+            </span>
+          </h1>
+          <p className="mt-2 text-[15px] text-text-2">
+            A quick look at what’s happening across your clients at <span className="font-medium text-text">{s.agency.name}</span>.
+          </p>
         </div>
         <label className="flex items-center gap-2 text-xs text-text-2">
           <Switch label="Only my work" checked={mine} onChange={setMine} />
@@ -48,33 +64,41 @@ export function DashboardPage() {
         ) : query.isError ? (
           <EmptyState title="Couldn’t load the dashboard">{errorMessage(query.error)}</EmptyState>
         ) : (
-          <Overview data={query.data} />
+          <Overview data={query.data} mine={mine} />
         )}
       </div>
     </>
   )
 }
 
-function Overview({ data: d }: { data: Dashboard }) {
+function Overview({ data: d, mine }: { data: Dashboard; mine: boolean }) {
   const m = d.metrics
+  /** The content list behind a number, narrowed to "mine" when the dashboard is. */
+  const content = (states: string) => `/app/content?state=${states}${mine ? '&mine=true' : ''}`
   const brand = (id: string) => d.clients.find((c) => c.id === id)?.brandName ?? ''
   const notOnTrack = d.clients.filter((c) => c.health !== 'on_track')
 
   return (
     <>
       <section aria-label="Overview" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Awaiting review" value={m.awaitingReview} icon={ClipboardCheck} tone="indigo" note="internal" />
-        <StatCard label="Awaiting approval" value={m.awaitingApproval} icon={Hourglass} tone="amber" note="with clients" />
-        <StatCard label="In production" value={m.inProduction} icon={Hammer} tone="blue" />
+        <StatCard label="Awaiting review" value={m.awaitingReview} icon={ClipboardCheck} tone="indigo" note="internal" to="/app/review" />
+        <StatCard label="Awaiting approval" value={m.awaitingApproval} icon={Hourglass} tone="amber" note="with clients" to={content('client_review')} />
+        <StatCard label="In production" value={m.inProduction} icon={Hammer} tone="blue" to={content('in_production')} />
+        {/* Overdue tasks and approvals together: they're listed one by one under Needs attention. */}
         <StatCard label="Overdue" value={m.overdue} icon={AlarmClock} tone={m.overdue ? 'red' : 'gray'} />
-        <StatCard label="Changes requested" value={m.changesRequested} icon={ThumbsDown} tone={m.changesRequested ? 'red' : 'gray'} />
-        <StatCard label="Ready to schedule" value={m.readyToSchedule} icon={CalendarCheck} tone="green" />
-        <StatCard label="Scheduled" value={m.scheduled} icon={CalendarCheck} tone="green" />
-        <StatCard label="Clients needing attention" value={notOnTrack.length} icon={TriangleAlert} tone={notOnTrack.length ? 'amber' : 'gray'} note={`of ${d.clients.length}`} />
+        <StatCard label="Changes requested" value={m.changesRequested} icon={ThumbsDown} tone={m.changesRequested ? 'red' : 'gray'} to={content('changes_requested')} />
+        <StatCard label="Ready to schedule" value={m.readyToSchedule} icon={CalendarCheck} tone="green" to={content('approved')} />
+        <StatCard label="Scheduled" value={m.scheduled} icon={CalendarCheck} tone="green" to={content('scheduled,publishing')} />
+        <StatCard label="Clients needing attention" value={notOnTrack.length} icon={TriangleAlert} tone={notOnTrack.length ? 'amber' : 'gray'} note={`of ${d.clients.length}`} to="/app/clients" />
       </section>
 
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <UpcomingMeetings brand={brand} />
+        <UpcomingContent mine={mine} />
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Card title="Needs attention" description="Most urgent first." action={<span className="grid h-7 min-w-7 place-items-center rounded-full bg-surface-input px-2 text-xs font-medium">{d.needsAttention.total}</span>}>
+        <DashCard title="Needs attention" description="Most urgent first." action={<span className="grid h-7 min-w-7 place-items-center rounded-full bg-surface-input px-2 text-xs font-medium">{d.needsAttention.total}</span>}>
           {d.needsAttention.items.length === 0 ? (
             <EmptyState title="All caught up">Nothing is late, at risk or waiting on your team.</EmptyState>
           ) : (
@@ -95,9 +119,9 @@ function Overview({ data: d }: { data: Dashboard }) {
               ))}
             </ul>
           )}
-        </Card>
+        </DashCard>
 
-        <Card title="Waiting on clients" description="Sent for approval, oldest first.">
+        <DashCard title="Waiting on clients" description="Sent for approval, oldest first." viewAll={content('client_review')}>
           {d.pendingApprovals.length === 0 ? (
             <EmptyState title="Nothing with clients">Content sent for review shows up here.</EmptyState>
           ) : (
@@ -122,11 +146,11 @@ function Overview({ data: d }: { data: Dashboard }) {
               ))}
             </ul>
           )}
-        </Card>
+        </DashCard>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <Card title="Team workload" description="Active tasks against each person’s capacity." className="xl:col-span-2">
+        <DashCard title="Team workload" description="Active tasks against each person’s capacity." viewAll="/app/team" className="xl:col-span-2">
           {d.workload.length === 0 ? (
             <EmptyState title="No one on the team yet" />
           ) : (
@@ -153,9 +177,9 @@ function Overview({ data: d }: { data: Dashboard }) {
               ))}
             </ul>
           )}
-        </Card>
+        </DashCard>
 
-        <Card title="Client health">
+        <DashCard title="Client health" viewAll="/app/clients">
           {d.clients.length === 0 ? (
             <EmptyState title="No clients yet" />
           ) : (
@@ -175,17 +199,10 @@ function Overview({ data: d }: { data: Dashboard }) {
                 ))}
             </ul>
           )}
-        </Card>
+        </DashCard>
       </div>
 
-      <Card
-        title="Recent activity"
-        action={
-          <Link to="/app/activity" className="text-xs font-medium text-brand hover:underline">
-            See all
-          </Link>
-        }
-      >
+      <DashCard title="Recent activity" viewAll="/app/activity">
         {d.recentActivity.length === 0 ? (
           <EmptyState title="Nothing yet" />
         ) : (
@@ -198,9 +215,15 @@ function Overview({ data: d }: { data: Dashboard }) {
             ))}
           </ul>
         )}
-      </Card>
+      </DashCard>
     </>
   )
+}
+
+/** "Good morning" until noon, "Good afternoon" until 5 pm, then "Good evening", in the viewer's time. */
+function greeting() {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
 
 const rank = (h: string) => (h === 'blocked' ? 0 : h === 'needs_attention' ? 1 : 2)

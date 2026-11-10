@@ -33,6 +33,6 @@ export const memberStatusLabel = { active: 'Active', disabled: 'Disabled' } as c
 export function actionLabel(action: string) {
   const [area, verb = ''] = action.split('.')
   const text = verb.replace(/_/g, ' ')
-  const areaLabel: Record<string, string> = { agency: 'Agency', platform: 'Admin', user: 'User', settings: 'Settings' }
+  const areaLabel: Record<string, string> = { agency: 'Agency', platform: 'Admin', user: 'User', settings: 'Settings', support: 'Support' }
   return `${areaLabel[area!] ?? area} ${text}`.trim()
 }

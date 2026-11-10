@@ -49,6 +49,11 @@ const taskSchema = new Schema(
       default: [],
     },
     attachments: { type: [{ type: Schema.Types.ObjectId, ref: 'File' }], default: [] },
+    /** The steps inside the task, ticked off as they're done. The whole list is saved at once (with `rev`). */
+    subtasks: {
+      type: [new Schema({ title: { type: String, required: true, trim: true }, done: { type: Boolean, default: false } })],
+      default: [],
+    },
     completedAt: { type: Date, default: null },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
     ...revFields,

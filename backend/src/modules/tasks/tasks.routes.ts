@@ -10,6 +10,7 @@ import { isManagerPlus, loadClient, scopeFilter } from '../../lib/scope.ts'
 import { dateOnlySchema } from '../../lib/time.ts'
 import { idempotent } from '../../middleware/idempotency.ts'
 import { forbidden, invalid, notFound } from '../../utils/AppError.ts'
+import { CampaignModel } from '../campaigns/campaign.model.ts'
 import { AgencyAccessModel } from '../clients/agencyAccess.model.ts'
 import { ContentModel, PRIORITIES } from '../content/content.model.ts'
 import { MessageModel } from '../feedback/message.model.ts'
@@ -62,6 +63,7 @@ const listSchema = z.object({
   ...pageQuery,
   client: z.string().optional(),
   content: z.string().optional(),
+  campaign: z.string().optional(),
   status: csvEnum(TASK_STATUSES),
   owner: z.string().optional(),
   mine: z.stringbool().optional(),
@@ -75,6 +77,7 @@ tasksRouter.get('/', async (req, res) => {
   const and: Record<string, unknown>[] = []
   if (f.client) and.push({ client: objectId(f.client) })
   if (f.content) match.content = objectId(f.content)
+  if (f.campaign) match.campaign = objectId(f.campaign)
   if (f.owner) match.owner = objectId(f.owner)
   if (f.mine) and.push({ $or: [{ owner: req.agencyAuth!.user._id }, { collaborators: req.agencyAuth!.user._id }] })
   if (f.blocked !== undefined) and.push(f.blocked ? { $or: [{ 'blocked.manual': true }, { 'blocked.byDependency': true }] } : { 'blocked.manual': false, 'blocked.byDependency': false })
@@ -109,7 +112,21 @@ const fieldsSchema = z.object({
   due: z.union([dateOnlySchema, z.literal('')]).optional(),
   priority: z.enum(PRIORITIES).optional(),
   attachments: z.array(z.string()).max(20).optional(),
+  campaign: z.string().nullable().optional(),
+  subtasks: z.array(z.object({ _id: z.string().optional(), title: z.string().trim().min(1, 'Name the step').max(300), done: z.boolean().default(false) })).max(100).optional(),
 })
+
+/** A campaign of the task's own client, or none. */
+async function campaignOf(client: Types.ObjectId, id: string | null | undefined) {
+  if (!id) return null
+  const c = await CampaignModel.findOne({ _id: objectId(id, 'Campaign not found.'), client, deletedAt: null }, { _id: 1 }).lean()
+  if (!c) throw invalid('campaign', 'Pick a campaign of this client')
+  return c._id
+}
+
+/** Keeps the ids of existing steps, so a step ticked in one tab is the same step in another. */
+const subtaskDocs = (items: { _id?: string; title: string; done: boolean }[]) =>
+  items.map((s) => ({ ...(s._id && /^[0-9a-f]{24}$/.test(s._id) ? { _id: objectId(s._id) } : {}), title: s.title, done: s.done }))
 
 tasksRouter.post('/', idempotent(), async (req, res) => {
   const input = fieldsSchema.extend({ client: z.string(), content: z.string().optional() }).parse(req.body)
@@ -126,6 +143,8 @@ tasksRouter.post('/', idempotent(), async (req, res) => {
   const task = await TaskModel.create({
     ...base,
     content,
+    campaign: await campaignOf(client._id, input.campaign),
+    subtasks: input.subtasks ? subtaskDocs(input.subtasks) : [],
     title: input.title,
     description: input.description ?? '',
     owner: input.owner === undefined ? auth.user._id : input.owner ? (await people(req, client._id, [input.owner], 'owner'))[0] : null,
@@ -169,7 +188,7 @@ tasksRouter.get('/:id', async (req, res) => {
   res.json({ task: { ...task, blocked: blockedView(task), dependencyTasks: deps, dependents } })
 })
 
-const EDITABLE = ['title', 'description', 'owner', 'collaborators', 'due', 'priority', 'attachments', 'blocked'] as const
+const EDITABLE = ['title', 'description', 'owner', 'collaborators', 'due', 'priority', 'attachments', 'blocked', 'campaign', 'subtasks'] as const
 
 const patchSchema = fieldsSchema.partial().extend({
   rev: z.number().int().min(1),
@@ -178,9 +197,11 @@ const patchSchema = fieldsSchema.partial().extend({
 })
 
 tasksRouter.patch('/:id', async (req, res) => {
-  const { rev, owner, collaborators, attachments: files, blocked, ...rest } = patchSchema.parse(req.body)
+  const { rev, owner, collaborators, attachments: files, blocked, campaign, subtasks, ...rest } = patchSchema.parse(req.body)
   const task = await loadTask(req, req.params.id, 'write')
   const set: Record<string, unknown> = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined))
+  if (campaign !== undefined) set.campaign = await campaignOf(task.client, campaign)
+  if (subtasks !== undefined) set.subtasks = subtaskDocs(subtasks)
   if (owner !== undefined) set.owner = owner ? (await people(req, task.client, [owner], 'owner'))[0] : null
   if (collaborators !== undefined) set.collaborators = await people(req, task.client, collaborators, 'collaborators')
   if (files !== undefined) set.attachments = await attachments(task, files)

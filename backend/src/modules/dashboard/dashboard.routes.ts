@@ -32,7 +32,9 @@ const dashSchema = z.object({ mine: z.stringbool().default(false) })
 dashboardRouter.get('/', async (req, res) => {
   const { mine } = dashSchema.parse(req.query)
   const auth = req.agencyAuth!
-  const clientIds = await accessibleClientIds(req)
+  // Only live clients: a deleted client's content no longer counts.
+  const access = await accessibleClientIds(req)
+  const clientIds = (await ClientModel.distinct('_id', { agency: auth.agency._id, deletedAt: null, ...(access ? { _id: { $in: access } } : {}) })) as Types.ObjectId[]
   const attention = await agencyAttention(auth.agency._id, clientIds, { _id: auth.user._id, mine })
   const scope = { agency: auth.agency._id, deletedAt: null, ...(clientIds ? { client: { $in: clientIds } } : {}) }
 
@@ -167,7 +169,9 @@ calendarRouter.get('/', async (req, res) => {
     }
   }
   if (f.layers.includes('plans')) {
-    const months = [...new Set([from.toISOString().slice(0, 7), to.toISOString().slice(0, 7)])]
+    // Every month the range touches: a month view starts and ends in the neighbouring months, so its own month is in between.
+    const months: string[] = []
+    for (const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1)); d < to; d.setUTCMonth(d.getUTCMonth() + 1)) months.push(d.toISOString().slice(0, 7))
     const rows = await ContentPlanModel.find({ ...(await scopeFilter(req, { agencyLevel: false })), month: { $in: months }, ...(f.client ? { client: objectId(f.client) } : {}) }, { client: 1, month: 1, status: 1 }).lean()
     for (const p of rows) {
       events.push({ layer: 'plans', id: p._id, title: `${monthLabel(p.month)} plan`, client: { id: p.client, brandName: brand(p.client)?.brandName }, date: `${p.month}-01`, allDay: true, status: p.status, link: `/app/plans/${p._id}` })

@@ -3,7 +3,7 @@ import type { Request } from 'express'
 import mongoose, { type Types } from 'mongoose'
 import { logActivity } from '../../lib/activity.ts'
 import { transition } from '../../lib/concurrency.ts'
-import { appLink, sendEmail } from '../../lib/mailer.ts'
+import { appLink, clientAppLink, sendEmail } from '../../lib/mailer.ts'
 import { hashToken } from '../../lib/session.ts'
 import { AppError, notFound } from '../../utils/AppError.ts'
 import { AgencyModel } from '../agencies/agency.model.ts'
@@ -88,7 +88,7 @@ export async function createInvitation(req: Request, input: InviteInput) {
     text: [
       `${by.name} invited you to join ${place} as ${input.role}.`,
       input.message ? `“${input.message}”` : '',
-      `Accept the invitation: ${appLink(`/invite/${token}`)}`,
+      `Accept the invitation: ${(input.kind === 'client' ? clientAppLink : appLink)(`/invite/${token}`)}`,
       `This link works only for ${input.email} and expires in ${INVITE_TTL_DAYS} days.`,
     ]
       .filter(Boolean)

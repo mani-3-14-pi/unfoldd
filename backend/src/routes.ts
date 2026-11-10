@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { liveEvents } from './lib/live.ts'
 import { requireAgencyUser, requireClientUser, requirePlatformAdmin, requireUser } from './middleware/auth.ts'
 import { activityAdminRouter } from './modules/activity/activity.admin.routes.ts'
 import { overviewRouter } from './modules/admin/overview.routes.ts'
@@ -60,6 +61,7 @@ apiRouter.use('/requests', requireAgencyUser, requestsRouter)
 apiRouter.use('/templates', requireAgencyUser, templatesRouter)
 apiRouter.use('/banners', requireAgencyUser, bannersRouter)
 apiRouter.use('/dashboard', requireAgencyUser, dashboardRouter)
+apiRouter.get('/events', requireAgencyUser, liveEvents)
 apiRouter.use('/calendar', requireAgencyUser, calendarRouter)
 apiRouter.use('/feedback', requireAgencyUser, feedbackInboxRouter)
 

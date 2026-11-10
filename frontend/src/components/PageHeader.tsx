@@ -25,10 +25,10 @@ export function PageHeader({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="font-display text-[30px] leading-[1.1] font-bold tracking-[-0.02em] sm:text-[38px]">{title}</h1>
             {meta}
           </div>
-          {description && <p className="mt-1 text-[13px] text-text-3">{description}</p>}
+          {description && <p className="mt-1.5 text-sm text-text-2 sm:text-[15px]">{description}</p>}
         </div>
         {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
       </div>

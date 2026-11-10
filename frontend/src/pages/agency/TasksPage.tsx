@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Columns3, List, Plus } from 'lucide-react'
+import { Building2, Columns3, List, Plus, UserRound } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import { CellText, DataTable, type Column } from '@/components/list/DataTable'
 import type { FilterDef } from '@/components/list/filters'
@@ -9,7 +9,6 @@ import { Pagination } from '@/components/list/Pagination'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/Card'
-import { Select } from '@/components/ui/Field'
 import { Pill } from '@/components/ui/Pill'
 import { clientsApi } from '@/features/clients/api'
 import { priorityLabel, priorityTone } from '@/features/content/labels'
@@ -18,6 +17,7 @@ import { isOverdue, taskStatusLabel, todayString } from '@/features/tasks/labels
 import { BlockedBadge, TaskStatusPill } from '@/features/tasks/pills'
 import { TaskBoard } from '@/features/tasks/TaskBoard'
 import { TaskFormDialog } from '@/features/tasks/TaskFormDialog'
+import { FilterSelect, TaskStats, WorkloadPanel } from '@/features/tasks/TaskOverview'
 import { activeTeamQuery } from '@/features/team/api'
 import { apiQuery, useListState } from '@/hooks/useListState'
 import { cn } from '@/lib/cn'
@@ -43,8 +43,11 @@ export function TasksPage() {
   // The API filters, without the view switch and (for the board) paging and status tabs.
   const params = new URLSearchParams(state.params)
   params.delete('view')
-  if (board) ['page', 'pageSize', 'status'].forEach((k) => params.delete(k))
-  const query = apiQuery(params)
+  // The board and the numbers on top see every status, and no paging.
+  const boardParams = new URLSearchParams(params)
+  ;['page', 'pageSize', 'status'].forEach((k) => boardParams.delete(k))
+  const boardQuery = apiQuery(boardParams)
+  const query = board ? boardQuery : apiQuery(params)
 
   const list = useQuery({
     queryKey: ['agency', 'tasks', 'list', query],
@@ -114,6 +117,8 @@ export function TasksPage() {
         }
       />
 
+      <TaskStats query={boardQuery} today={today} onStatus={(status) => state.update({ status, view: null })} />
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="View" className="flex rounded-lg border border-border-strong bg-white p-0.5">
           {[
@@ -132,22 +137,22 @@ export function TasksPage() {
             </button>
           ))}
         </div>
-        <Select aria-label="Client" value={state.get('client')} onChange={(e) => state.update({ client: e.target.value })} className="w-44">
+        <FilterSelect label="Client" icon={Building2} value={state.get('client')} onChange={(client) => state.update({ client })}>
           <option value="">All clients</option>
           {clients.data?.items.map((c) => (
             <option key={c._id} value={c._id}>
               {c.brandName}
             </option>
           ))}
-        </Select>
-        <Select aria-label="Owner" value={state.get('owner')} onChange={(e) => state.update({ owner: e.target.value })} className="w-44">
+        </FilterSelect>
+        <FilterSelect label="Owner" icon={UserRound} value={state.get('owner')} onChange={(owner) => state.update({ owner })}>
           <option value="">Anyone</option>
           {team.data?.items.map((m) => (
             <option key={m.user._id} value={m.user._id}>
               {m.user.name}
             </option>
           ))}
-        </Select>
+        </FilterSelect>
       </div>
 
       {board ? (
@@ -171,44 +176,51 @@ export function TasksPage() {
               options: TASK_STATUSES.map((s) => ({ value: s, label: taskStatusLabel[s] })),
             }}
           />
-          <DataTable
-            label="Tasks"
-            columns={columns}
-            rows={data?.items}
-            rowKey={(t) => t._id}
-            loading={list.isPending}
-            fetching={list.isPlaceholderData}
-            onRowClick={(t) => navigate(`/app/tasks/${t._id}`)}
-            empty={
-              list.isError ? (
-                <EmptyState title="Couldn’t load tasks">{errorMessage(list.error)}</EmptyState>
-              ) : anyFilter ? (
-                <EmptyState title="No tasks match" action={<Button onClick={() => state.clear([...state.params.keys()].filter((k) => k !== 'view'))}>Clear filters</Button>} />
-              ) : (
-                <EmptyState
-                  title="No tasks yet"
-                  action={
-                    <Button variant="primary" onClick={() => setCreating(true)}>
-                      <Plus size={16} /> New task
-                    </Button>
-                  }
-                >
-                  Add tasks here, or turn client feedback into tasks from a content page.
-                </EmptyState>
-              )
-            }
-            footer={
-              data &&
-              data.total > 0 && (
-                <Pagination
-                  {...data}
-                  noun="tasks"
-                  onPage={(page) => state.update({ page })}
-                  onPageSize={(pageSize) => state.update({ pageSize: pageSize === 25 ? null : pageSize })}
-                />
-              )
-            }
-          />
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0">
+              <DataTable
+                label="Tasks"
+                columns={columns}
+                rows={data?.items}
+                rowKey={(t) => t._id}
+                loading={list.isPending}
+                fetching={list.isPlaceholderData}
+                onRowClick={(t) => navigate(`/app/tasks/${t._id}`)}
+                empty={
+                  list.isError ? (
+                    <EmptyState title="Couldn’t load tasks">{errorMessage(list.error)}</EmptyState>
+                  ) : anyFilter ? (
+                    <EmptyState title="No tasks match" action={<Button onClick={() => state.clear([...state.params.keys()].filter((k) => k !== 'view'))}>Clear filters</Button>} />
+                  ) : (
+                    <EmptyState
+                      title="No tasks yet"
+                      action={
+                        <Button variant="primary" onClick={() => setCreating(true)}>
+                          <Plus size={16} /> New task
+                        </Button>
+                      }
+                    >
+                      Add tasks here, or turn client feedback into tasks from a content page.
+                    </EmptyState>
+                  )
+                }
+                footer={
+                  data &&
+                  data.total > 0 && (
+                    <Pagination
+                      {...data}
+                      noun="tasks"
+                      onPage={(page) => state.update({ page })}
+                      onPageSize={(pageSize) => state.update({ pageSize: pageSize === 25 ? null : pageSize })}
+                    />
+                  )
+                }
+              />
+            </div>
+            <aside className="xl:sticky xl:top-6">
+              <WorkloadPanel owner={state.get('owner')} onOwner={(owner) => state.update({ owner })} />
+            </aside>
+          </div>
         </div>
       )}
 

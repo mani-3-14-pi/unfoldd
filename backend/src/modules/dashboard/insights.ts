@@ -6,7 +6,7 @@ import { PublishJobModel } from '../content/publishJob.model.ts'
 import { ContentPlanModel } from '../plans/plan.model.ts'
 import { RequestModel } from '../requests/request.model.ts'
 import { TaskModel } from '../tasks/task.model.ts'
-import { MembershipModel } from '../users/membership.model.ts'
+import { DEFAULT_CAPACITY, MembershipModel } from '../users/membership.model.ts'
 
 /*
  * Phase 3: every count, list and badge here is computed live from source rows (D51, rule §12.12).
@@ -175,14 +175,16 @@ export async function teamWorkload(agency: Types.ObjectId) {
     .filter((m) => m.user)
     .map((m) => {
       const active = counts.find((c) => String(c._id) === String(m.user._id))?.n ?? 0
-      const load = active / (m.capacity || 10)
+      // Memberships stored before these fields existed have none; lean reads skip schema defaults.
+      const capacity = m.capacity || DEFAULT_CAPACITY
+      const load = active / capacity
       return {
         user: m.user,
         role: m.role,
-        titles: m.titles,
-        departments: m.departments,
+        titles: m.titles ?? [],
+        departments: m.departments ?? [],
         activeTasks: active,
-        capacity: m.capacity,
+        capacity,
         load: Math.round(load * 100),
         status: load < 0.8 ? 'available' : load <= 1 ? 'at_capacity' : 'overloaded',
       }

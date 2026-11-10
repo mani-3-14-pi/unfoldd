@@ -1,17 +1,16 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Archive, CheckCircle2, EllipsisVertical, Pause, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router'
+import { Archive, Building2, CheckCircle2, ChevronRight, EllipsisVertical, Pause, Pencil, Play, RotateCcw, Trash2, UserRound } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router'
 import { PageHeader } from '@/components/PageHeader'
 import { TabNav } from '@/components/TabNav'
 import { Button } from '@/components/ui/Button'
-import { Card, EmptyState } from '@/components/ui/Card'
+import { EmptyState } from '@/components/ui/Card'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { Details } from '@/components/ui/Details'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
 import { isAgencyAdmin, isManagerPlus } from '@/features/agency/roles'
 import { useAgencySession } from '@/features/agency/session'
-import { clientKey, clientsApi, type ClientAction, type ClientDetail } from '@/features/clients/api'
+import { clientKey, clientsApi, type ClientAction } from '@/features/clients/api'
 import { ClientBrand } from '@/features/brand/ClientBrand'
 import { CampaignList } from '@/features/campaigns/CampaignList'
 import { ClientAccess } from '@/features/clients/ClientAccess'
@@ -22,14 +21,14 @@ import { ClientMeetings } from '@/features/meetings/MeetingList'
 import { PlanList } from '@/features/plans/PlanList'
 import { RequestList } from '@/features/requests/RequestList'
 import { ClientFormDialog } from '@/features/clients/ClientFormDialog'
+import { ClientLogo } from '@/features/clients/ClientLogo'
+import { ClientOverview } from '@/features/clients/ClientOverview'
 import { ClientPeople } from '@/features/clients/ClientPeople'
 import { ContentList } from '@/features/content/ContentList'
 import { actionsFor, clientActionCopy } from '@/features/clients/labels'
 import { ClientStatusPill, HealthPill } from '@/features/clients/pills'
 import { ActivityFeed } from '@/features/workspace/ActivityFeed'
 import { errorMessage } from '@/lib/errors'
-import { formatDate, initials, plural } from '@/lib/format'
-import { timezoneLabel } from '@/lib/timezones'
 import { toast } from '@/lib/toast'
 
 const actionIcon = { activate: Play, pause: Pause, complete: CheckCircle2, archive: Archive, restore: RotateCcw }
@@ -80,25 +79,37 @@ export function ClientDetailPage() {
 
   return (
     <>
-      <PageHeader
-        back={back}
-        title={
-          <span className="flex items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-surface-input text-sm font-semibold text-text-3">
-              {c.logoUrl ? <img src={c.logoUrl} alt="" className="size-full object-cover" /> : initials(c.brandName)}
-            </span>
-            {c.brandName}
-          </span>
-        }
-        meta={
-          <>
-            <ClientStatusPill status={c.status} />
-            {c.status !== 'archived' && c.health && <HealthPill {...c.health} />}
-          </>
-        }
-        description={[c.name !== c.brandName && c.name, c.accountManager && `Account manager: ${c.accountManager.name}`].filter(Boolean).join(' · ') || undefined}
-        actions={
-          <>
+      <header className="mb-6">
+        <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1.5 text-[13px] text-text-3">
+          <Link to={back.to} className="hover:text-text">
+            {back.label}
+          </Link>
+          <ChevronRight size={14} aria-hidden="true" />
+          <span className="truncate text-text-2">{c.brandName}</span>
+        </nav>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-center gap-5">
+            <ClientLogo id={c._id} name={c.brandName} url={c.logoUrl} size="xl" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="font-display text-[30px] leading-[1.1] font-bold tracking-[-0.02em] sm:text-[40px]">{c.brandName}</h1>
+                <ClientStatusPill status={c.status} />
+                {c.status !== 'archived' && c.health && <HealthPill {...c.health} />}
+              </div>
+              <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-2">
+                {c.name !== c.brandName && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Building2 size={15} className="text-text-3" /> {c.name}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <UserRound size={15} className="text-text-3" />
+                  {c.accountManager ? `Account manager: ${c.accountManager.name}` : 'No account manager yet'}
+                </span>
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
             {c.canManage && (
               <Button onClick={() => setEditing(true)}>
                 <Pencil size={15} /> Edit details
@@ -109,9 +120,9 @@ export function ClientDetailPage() {
                 <EllipsisVertical size={17} />
               </Menu>
             )}
-          </>
-        }
-      />
+          </div>
+        </div>
+      </header>
 
       {c.status === 'archived' && (
         <p className="mb-5 rounded-lg border border-border-strong bg-surface px-4 py-3 text-[13px] text-text-2">
@@ -138,7 +149,7 @@ export function ClientDetailPage() {
         ]}
       />
 
-      {tab === '' && <Overview client={c} />}
+      {tab === '' && <ClientOverview client={c} />}
       {tab === 'content' && <ContentList clientId={c._id} canCreate={c.status !== 'archived'} />}
       {tab === 'brand' && <ClientBrand client={c} />}
       {tab === 'campaigns' && <CampaignList clientId={c._id} />}
@@ -199,66 +210,5 @@ export function ClientDetailPage() {
         </ConfirmDialog>
       )}
     </>
-  )
-}
-
-function Overview({ client: c }: { client: ClientDetail }) {
-  const health = c.status !== 'archived' && c.health && c.health.health !== 'on_track' ? c.health : null
-  return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <div className="flex flex-col gap-6">
-        {health && (
-          <section className={`flex gap-3 rounded-xl border px-5 py-4 ${health.health === 'blocked' ? 'border-red-soft bg-[#fdf3f3] text-red-ink' : 'border-amber-soft bg-[#fdf8f1] text-amber-ink'}`}>
-            <AlertTriangle size={18} className="mt-px shrink-0" />
-            <div>
-              <h2 className="text-[13px] font-semibold">{health.health === 'blocked' ? 'Blocked' : 'Needs attention'}</h2>
-              <ul className="mt-1 list-disc pl-4 text-[13px]">
-                {health.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </div>
-          </section>
-        )}
-        <Card title="Details">
-          <Details
-            rows={[
-              { label: 'Brand', value: c.brandName },
-              { label: 'Company', value: c.name },
-              { label: 'Services', value: c.services.join(', '), wide: true },
-              { label: 'Account manager', value: c.accountManager?.name ?? <span className="text-amber-ink">Not assigned</span> },
-              { label: 'Client since', value: c.startDate ? formatDate(c.startDate) : '' },
-              { label: 'Timezone', value: timezoneLabel(c.timezone) },
-              { label: 'Added', value: formatDate(c.createdAt) },
-            ]}
-          />
-        </Card>
-        <Card title="Internal notes" description="Only your team sees these.">
-          <p className="px-5 py-4 text-[13px] whitespace-pre-line text-text-2">{c.notes || 'No notes yet.'}</p>
-        </Card>
-      </div>
-      <div className="flex flex-col gap-6">
-        <Card title="Contact">
-          <Details
-            className="sm:grid-cols-1"
-            rows={[
-              { label: 'Name', value: c.contact.name },
-              { label: 'Email', value: c.contact.email && <a href={`mailto:${c.contact.email}`} className="hover:underline">{c.contact.email}</a> },
-              { label: 'Phone', value: c.contact.phone },
-            ]}
-          />
-        </Card>
-        <Card title="Contract">
-          <Details
-            className="sm:grid-cols-1"
-            rows={[
-              { label: 'Revisions included', value: `${plural(c.contract.revisionsIncluded, 'round')} per post` },
-              { label: 'Approval needed', value: `${plural(c.contract.approvalLeadHours, 'hour')} before publishing` },
-              { label: 'Internal review', value: c.contract.internalReview ? 'On: a manager approves before the client sees it' : 'Off: work goes straight to the client' },
-            ]}
-          />
-        </Card>
-      </div>
-    </div>
   )
 }

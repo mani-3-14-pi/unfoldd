@@ -19,6 +19,13 @@ export interface Blocked {
   byDependency?: boolean
 }
 
+/** A step inside a task. */
+export interface Subtask {
+  _id?: string
+  title: string
+  done: boolean
+}
+
 export interface Dependency {
   type: 'task' | 'request'
   id: string
@@ -45,6 +52,7 @@ export interface Task {
   position: number
   blocked: Blocked
   dependencies: Dependency[]
+  subtasks: Subtask[]
   completedAt: string | null
   createdBy: string
   rev: number
@@ -70,6 +78,7 @@ export interface TaskInput {
   owner?: string | null
   due?: string
   priority?: Priority
+  campaign?: string | null
 }
 
 export interface TaskComment {
@@ -90,7 +99,7 @@ export const tasksApi = {
   board: (query: string) => api<{ columns: { status: TaskStatus; items: Task[] }[] }>(`/tasks?view=board&${query}`),
   get: (id: string) => api<{ task: TaskDetail }>(`/tasks/${id}`),
   create: (body: TaskInput & { client: string; content?: string }, idempotencyKey: string) => api<{ task: Task }>('/tasks', { body, idempotencyKey }),
-  update: (id: string, body: Partial<TaskInput> & { rev: number; blocked?: { manual: boolean; reason: string } }) =>
+  update: (id: string, body: Partial<TaskInput> & { rev: number; blocked?: { manual: boolean; reason: string }; subtasks?: Subtask[] }) =>
     api<{ task: Task }>(`/tasks/${id}`, { method: 'PATCH', body }),
   /** 409 if someone moved it first: `expectedStatus` is the column the card was picked up from. */
   move: (id: string, body: { status: TaskStatus; expectedStatus?: TaskStatus; position?: number }) => api<{ task: Task }>(`/tasks/${id}/move`, { body }),

@@ -14,6 +14,7 @@ import { errorMessage } from '@/lib/errors'
 import { formatDate, timeAgo } from '@/lib/format'
 import { CONTENT_STATES, contentApi, PLATFORMS, type ContentRow, type ContentState } from './api'
 import { ContentFormDialog } from './ContentFormDialog'
+import { ContentGrid, ContentStats, ContentViewToggle } from './ContentGrid'
 import { formatLabel, platformLabel, priorityLabel, priorityTone, versionLabel } from './labels'
 import { ApprovalPill, StatePill } from './pills'
 
@@ -35,17 +36,25 @@ const TABS: { value: string; label: string; states: ContentState[] }[] = [
   { value: 'cancelled', label: 'Cancelled', states: ['cancelled'] },
 ]
 
-/** P42 production hub. With `clientId` it lists one client's content. */
-export function ContentList({ clientId, canCreate = true }: { clientId?: string; canCreate?: boolean }) {
+/**
+ * P42 production hub. With `clientId` it lists one client's content. `stats` adds the numbers on top; the page that
+ * shows them puts the list/grid switch in its own header, so with `stats` the switch isn't repeated here.
+ */
+export function ContentList({ clientId, canCreate = true, stats = false }: { clientId?: string; canCreate?: boolean; stats?: boolean }) {
   const state = useListState()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const fixed = clientId ? { client: clientId } : undefined
+  const grid = state.get('view') === 'grid'
+  // The layout switch is for this page only; the API gets the filters without it.
+  const params = new URLSearchParams(state.params)
+  params.delete('view')
+  const listQuery = apiQuery(params, fixed)
 
   const query = useQuery({
-    queryKey: ['agency', 'content', 'list', apiQuery(state.params, fixed)],
-    queryFn: () => contentApi.list(apiQuery(state.params, fixed)),
+    queryKey: ['agency', 'content', 'list', listQuery],
+    queryFn: () => contentApi.list(listQuery),
     placeholderData: keepPreviousData,
   })
   const data = query.data
@@ -97,16 +106,54 @@ export function ContentList({ clientId, canCreate = true }: { clientId?: string;
     { key: 'updated', header: 'Updated', cell: (c) => <span className="text-text-2">{timeAgo(c.updatedAt)}</span> },
   ]
 
-  const anyFilter = [...state.params.keys()].some((k) => !['page', 'pageSize', 'sort'].includes(k))
+  const anyFilter = [...state.params.keys()].some((k) => !['page', 'pageSize', 'sort', 'view'].includes(k))
   const allCount = data ? CONTENT_STATES.filter((s) => s !== 'cancelled').reduce((n, s) => n + data.counts[s], 0) : undefined
+
+  const empty = (
+    query.isError ? (
+      <EmptyState title="Couldn’t load content">{errorMessage(query.error)}</EmptyState>
+    ) : anyFilter ? (
+      <EmptyState title="Nothing here" action={<Button onClick={() => state.clear([...state.params.keys()].filter((k) => k !== 'view'))}>Show everything</Button>}>
+        {state.get('q') ? 'Try a different search.' : 'No content is at this stage right now.'}
+      </EmptyState>
+    ) : (
+      <EmptyState
+        title="No content yet"
+        action={
+          canCreate && (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              <Plus size={16} /> New content
+            </Button>
+          )
+        }
+      >
+        Create a post, reel or carousel, then upload its first version.
+      </EmptyState>
+    )
+  )
+  const footer = (
+    data &&
+    data.total > 0 && (
+      <Pagination
+        {...data}
+        noun="items"
+        onPage={(page) => state.update({ page })}
+        onPageSize={(pageSize) => state.update({ pageSize: pageSize === 25 ? null : pageSize })}
+      />
+    )
+  )
 
   return (
     <div className="flex flex-col gap-4">
-      {canCreate && clientId && (
-        <div className="flex justify-end">
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus size={16} /> New content
-          </Button>
+      {stats && <ContentStats data={data} state={state} />}
+      {!stats && (
+        <div className="flex justify-end gap-2">
+          <ContentViewToggle state={state} />
+          {canCreate && clientId && (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              <Plus size={16} /> New content
+            </Button>
+          )}
         </div>
       )}
       <ListToolbar
@@ -124,48 +171,21 @@ export function ContentList({ clientId, canCreate = true }: { clientId?: string;
           options: TABS.map((t) => ({ value: t.value, label: t.label, count: count(t.states) })),
         }}
       />
-      <DataTable
-        label="Content"
-        columns={columns}
-        rows={data?.items}
-        rowKey={(c) => c._id}
-        loading={query.isPending}
-        fetching={query.isPlaceholderData}
-        onRowClick={(c) => navigate(`/app/content/${c._id}`)}
-        empty={
-          query.isError ? (
-            <EmptyState title="Couldn’t load content">{errorMessage(query.error)}</EmptyState>
-          ) : anyFilter ? (
-            <EmptyState title="Nothing here" action={<Button onClick={() => state.clear([...state.params.keys()])}>Show everything</Button>}>
-              {state.get('q') ? 'Try a different search.' : 'No content is at this stage right now.'}
-            </EmptyState>
-          ) : (
-            <EmptyState
-              title="No content yet"
-              action={
-                canCreate && (
-                  <Button variant="primary" onClick={() => setCreating(true)}>
-                    <Plus size={16} /> New content
-                  </Button>
-                )
-              }
-            >
-              Create a post, reel or carousel, then upload its first version.
-            </EmptyState>
-          )
-        }
-        footer={
-          data &&
-          data.total > 0 && (
-            <Pagination
-              {...data}
-              noun="items"
-              onPage={(page) => state.update({ page })}
-              onPageSize={(pageSize) => state.update({ pageSize: pageSize === 25 ? null : pageSize })}
-            />
-          )
-        }
-      />
+      {grid ? (
+        <ContentGrid rows={data?.items} loading={query.isPending} fetching={query.isPlaceholderData} showClient={!clientId} empty={empty} footer={footer} />
+      ) : (
+        <DataTable
+          label="Content"
+          columns={columns}
+          rows={data?.items}
+          rowKey={(c) => c._id}
+          loading={query.isPending}
+          fetching={query.isPlaceholderData}
+          onRowClick={(c) => navigate(`/app/content/${c._id}`)}
+          empty={empty}
+          footer={footer}
+        />
+      )}
       {creating && (
         <ContentFormDialog
           clientId={clientId}

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
-import { isManagerPlus } from '@/features/agency/roles'
+import { canUploadCreative, isManagerPlus } from '@/features/agency/roles'
 import { useAgencySession } from '@/features/agency/session'
 import { templatesApi } from '@/features/templates/api'
 import { cn } from '@/lib/cn'
@@ -42,11 +42,13 @@ export function ContentActions({ content: c, onChanged, onUpload, onEdit }: { co
   })
   const act = (call: () => Promise<unknown>, done: string) => run.mutate({ call, done })
 
-  const upload = (primary: boolean) => (
-    <Button variant={primary ? 'primary' : 'secondary'} onClick={onUpload}>
-      <Upload size={15} /> Upload {next}
-    </Button>
-  )
+  const canUpload = canUploadCreative(s.role)
+  const upload = (primary: boolean) =>
+    canUpload && (
+      <Button variant={primary ? 'primary' : 'secondary'} onClick={onUpload}>
+        <Upload size={15} /> Upload {next}
+      </Button>
+    )
   const busy = run.isPending
 
   let buttons: ReactNode = null
@@ -180,7 +182,7 @@ export function ContentActions({ content: c, onChanged, onUpload, onEdit }: { co
   const more: MenuItem[] = [
     ...(!['published', 'cancelled'].includes(c.state) ? [{ label: 'Edit details', icon: Pencil, onSelect: onEdit }] : []),
     ...(!['published', 'cancelled'].includes(c.state) ? [{ label: 'Apply a task list', icon: ListChecks, onSelect: () => setDialog('task_list') }] : []),
-    ...(canUploadIn.includes(c.state) && !['planned', 'in_production', 'changes_requested', 'client_review'].includes(c.state)
+    ...(canUpload && canUploadIn.includes(c.state) && !['planned', 'in_production', 'changes_requested', 'client_review'].includes(c.state)
       ? [{ label: `Upload ${next}`, icon: Upload, onSelect: onUpload }]
       : []),
     ...(canCancel ? [{ label: 'Cancel content', icon: Ban, tone: 'danger' as const, onSelect: () => setDialog('cancel'), separated: true }] : []),

@@ -17,7 +17,8 @@ const AGENCY_CAPABILITIES = [
   { key: 'plans_campaigns', label: 'Create plans and campaigns, send plans', roles: ['owner', 'admin', 'manager'] },
   { key: 'brand_dna', label: 'Edit Brand DNA and creative guidelines', roles: ['owner', 'admin', 'manager'] },
   { key: 'templates', label: 'Create and edit templates', roles: ['owner', 'admin', 'manager'] },
-  { key: 'content', label: 'Create and edit content, upload versions, send to client', roles: ['owner', 'admin', 'manager', 'member'] },
+  { key: 'content', label: 'Create and edit content, send to client', roles: ['owner', 'admin', 'manager', 'member'] },
+  { key: 'upload_creative', label: 'Make and upload the creative (versions)', roles: ['member'] },
   { key: 'tasks', label: 'Work tasks, reply to feedback, internal notes', roles: ['owner', 'admin', 'manager', 'member'] },
   { key: 'publish', label: 'Schedule and publish (Members/Managers with “can publish”)', roles: ['owner', 'admin'], flag: 'canPublish' },
 ] as const

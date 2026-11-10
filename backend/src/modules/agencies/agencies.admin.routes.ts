@@ -124,7 +124,16 @@ agenciesAdminRouter.get('/:id/members', async (req, res) => {
   if (f.status.length) match.status = { $in: f.status }
   const pipeline: PipelineStage[] = [
     { $match: match },
-    { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'user', pipeline: [{ $project: { name: 1, email: 1, lastLoginAt: 1 } }] } },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'user',
+        // Whether 2FA is set up, never the secret: the admin's "Reset two-factor sign-in" needs it.
+        pipeline: [{ $project: { name: 1, email: 1, lastLoginAt: 1, twoFactorEnabled: { $ne: [{ $ifNull: ['$twoFactor.enabledAt', null] }, null] } } }],
+      },
+    },
     { $set: { user: { $first: '$user' } } },
   ]
   if (f.q) {

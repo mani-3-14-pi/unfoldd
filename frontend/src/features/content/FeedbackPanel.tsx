@@ -1,33 +1,24 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, CircleDot, ListTodo, Lock, MessageSquare, PenLine, PlayCircle, RotateCcw, Send, X } from 'lucide-react'
+import { CheckCircle2, ListTodo, Lock, MessageSquare, PenLine, PlayCircle, RotateCcw, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select, Textarea } from '@/components/ui/Field'
-import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { errorMessage } from '@/lib/errors'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
-import { contentApi, type Anchor, type ContentRecord, type Message, type Thread, type ThreadStatus } from './api'
+import { contentApi, type Anchor, type ContentRecord, type Thread, type ThreadStatus } from './api'
 import { useClientPeople } from './useClientPeople'
 import { formatTime, pinLabel, versionLabel } from './labels'
 import { ThreadStatusPill } from './pills'
-import { VoicePlayer, VoiceRecorder, type RecordedVoice } from './VoiceNote'
+import { VoicePlayer } from './VoiceNote'
 
 type Tab = 'client' | 'internal'
-
-const voiceOf = (v: RecordedVoice | null) => (v ? { voice: { file: v.file, durationMs: v.durationMs } } : {})
-
-/** A comment or reply may be text, a voice note, or both (feedback.service `buildMessage`). */
-const postComment = (contentId: string, body: { visibility: Tab; body: string; anchor?: Anchor; voice?: { file: string; durationMs: number } }) =>
-  api<{ thread: Thread }>(`/content/${contentId}/threads`, { body })
-const postReply = (contentId: string, threadId: string, body: { body: string; voice?: { file: string; durationMs: number } }) =>
-  api<{ message: Message }>(`/content/${contentId}/threads/${threadId}/messages`, { body })
 
 /**
  * Feedback on a content item (P53–P63): the client's items and the agency's internal notes in two separate tabs,
  * never one toggle (D20). New comments go on the current version only (D10); they can point at a spot drawn
- * in the viewer.
+ * in the viewer. The agency writes internal notes; the client's tab is the client's comments and the team's replies.
  */
 export function FeedbackPanel({
   content,
@@ -103,26 +94,26 @@ export function FeedbackPanel({
         )}
       </div>
 
-      <Composer
-        key={tab}
-        content={content}
-        visibility={tab}
-        disabledReason={
-          !viewingCurrent
-            ? 'You’re looking at an older version. Comments go on the current version.'
-            : !content.currentVersion
-              ? 'Upload a version first.'
-              : tab === 'client' && !content.clientVisibleAt
-                ? 'The client can’t see this content yet. Use an internal note.'
+      {tab === 'internal' ? (
+        <Composer
+          content={content}
+          disabledReason={
+            !viewingCurrent
+              ? 'You’re looking at an older version. Comments go on the current version.'
+              : !content.currentVersion
+                ? 'Upload a version first.'
                 : ['published', 'cancelled'].includes(content.state)
                   ? `This content is ${content.state}.`
                   : null
-        }
-        annotating={annotating}
-        onAnnotate={onAnnotate}
-        draft={draft}
-        onClearDraft={onClearDraft}
-      />
+          }
+          annotating={annotating}
+          onAnnotate={onAnnotate}
+          draft={draft}
+          onClearDraft={onClearDraft}
+        />
+      ) : (
+        <p className="border-t border-border px-4 py-3 text-xs text-text-3">The client comments while reviewing. Reply on a comment to answer them.</p>
+      )}
     </section>
   )
 }
@@ -141,17 +132,15 @@ function ThreadCard({ content, thread: t, active, onSelect }: { content: Content
   const people = useClientPeople(content.client._id)
   const [replying, setReplying] = useState(false)
   const [reply, setReply] = useState('')
-  const [replyVoice, setReplyVoice] = useState<RecordedVoice | null>(null)
   const [resolving, setResolving] = useState(false)
   const [note, setNote] = useState('')
   const refresh = () => void qc.invalidateQueries({ queryKey: ['agency', 'content', 'threads', content._id] })
   const writable = !['published', 'cancelled'].includes(content.state)
 
   const send = useMutation({
-    mutationFn: () => postReply(content._id, t._id, { body: reply.trim(), ...voiceOf(replyVoice) }),
+    mutationFn: () => contentApi.reply(content._id, t._id, reply.trim()),
     onSuccess: () => {
       setReply('')
-      setReplyVoice(null)
       setReplying(false)
       refresh()
     },
@@ -294,18 +283,15 @@ function ThreadCard({ content, thread: t, active, onSelect }: { content: Content
           className="mt-2 flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            if (reply.trim() || replyVoice) send.mutate()
+            if (reply.trim()) send.mutate()
           }}
         >
           <Textarea autoFocus value={reply} onChange={(e) => setReply(e.target.value)} placeholder={internal ? 'Reply to your team' : 'Reply to the client'} maxLength={5000} className="min-h-16" />
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="mr-auto">
-              <VoiceRecorder client={content.client._id} visibility={t.visibility} value={replyVoice} onChange={setReplyVoice} />
-            </span>
+          <div className="flex justify-end gap-2">
             <Button size="sm" onClick={() => setReplying(false)}>
               Cancel
             </Button>
-            <Button size="sm" variant="primary" type="submit" loading={send.isPending} disabled={!reply.trim() && !replyVoice}>
+            <Button size="sm" variant="primary" type="submit" loading={send.isPending} disabled={!reply.trim()}>
               <Send size={13} /> Reply
             </Button>
           </div>
@@ -315,9 +301,9 @@ function ThreadCard({ content, thread: t, active, onSelect }: { content: Content
   )
 }
 
+/** The agency only writes internal notes here (D20). The client's feedback comes from the client; the team replies on it. */
 function Composer({
   content,
-  visibility,
   disabledReason,
   annotating,
   onAnnotate,
@@ -325,7 +311,6 @@ function Composer({
   onClearDraft,
 }: {
   content: ContentRecord
-  visibility: Tab
   disabledReason: string | null
   annotating: boolean
   onAnnotate: (on: boolean) => void
@@ -334,41 +319,29 @@ function Composer({
 }) {
   const qc = useQueryClient()
   const [body, setBody] = useState('')
-  const [voice, setVoice] = useState<RecordedVoice | null>(null)
-  const internal = visibility === 'internal'
   const post = useMutation({
-    mutationFn: () => postComment(content._id, { visibility, body: body.trim(), ...(draft?.shapes?.length ? { anchor: draft } : {}), ...voiceOf(voice) }),
+    mutationFn: () => contentApi.comment(content._id, { visibility: 'internal', body: body.trim(), ...(draft?.shapes?.length ? { anchor: draft } : {}) }),
     onSuccess: () => {
       setBody('')
-      setVoice(null)
       onClearDraft()
       onAnnotate(false)
       void qc.invalidateQueries({ queryKey: ['agency', 'content', 'threads', content._id] })
-      toast(internal ? 'Internal note added' : 'Comment sent to the client')
+      toast('Internal note added')
     },
   })
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (body.trim() || voice) post.mutate()
+    if (body.trim()) post.mutate()
   }
-  const ready = !!body.trim() || !!voice
 
   if (disabledReason) return <p className="border-t border-border px-4 py-3 text-xs text-text-3">{disabledReason}</p>
 
   const version = content.versions.find((v) => v._id === content.currentVersion)
   const slide = version?.files.findIndex((f) => f._id === draft?.versionFile) ?? -1
   return (
-    <form onSubmit={submit} className={cn('flex flex-col gap-2 border-t p-3', internal ? 'border-indigo-soft bg-indigo-soft/50' : 'border-border')}>
-      <span className={cn('flex items-center gap-1.5 text-[11px] font-semibold tracking-wide uppercase', internal ? 'text-indigo-ink' : 'text-text-3')}>
-        {internal ? (
-          <>
-            <Lock size={12} /> Internal note · never shown to the client
-          </>
-        ) : (
-          <>
-            <CircleDot size={12} /> Comment to the client · sent now
-          </>
-        )}
+    <form onSubmit={submit} className="flex flex-col gap-2 border-t border-indigo-soft bg-indigo-soft/50 p-3">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-indigo-ink uppercase">
+        <Lock size={12} /> Internal note · never shown to the client
       </span>
       {draft?.shapes?.length ? (
         <span className="flex items-center gap-2 self-start rounded-full bg-white px-2.5 py-1 text-xs text-text-2 ring-1 ring-border-strong">
@@ -379,35 +352,19 @@ function Composer({
           </button>
         </span>
       ) : null}
-      <Textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        maxLength={5000}
-        placeholder={internal ? 'Note for your team…' : 'Write to the client…'}
-        className="min-h-16"
-        aria-label={internal ? 'Internal note' : 'Comment to the client'}
-      />
+      <Textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={5000} placeholder="Note for your team…" className="min-h-16" aria-label="Internal note" />
       {post.isError && <p className="text-xs text-negative">{errorMessage(post.error)}</p>}
       <div className="flex items-center justify-between gap-2">
-        <span className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant={annotating ? 'primary' : 'secondary'} onClick={() => onAnnotate(!annotating)} aria-pressed={annotating}>
-            <PenLine size={13} /> {annotating ? 'Drawing…' : 'Draw on creative'}
-          </Button>
-          <VoiceRecorder client={content.client._id} visibility={visibility} value={voice} onChange={setVoice} />
-        </span>
-        {internal ? (
-          <button
-            type="submit"
-            disabled={!ready || post.isPending}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-ink px-3 text-xs font-medium text-white hover:enabled:bg-[#3d39a8] disabled:opacity-55"
-          >
-            <Lock size={13} /> Add note
-          </button>
-        ) : (
-          <Button size="sm" variant="primary" type="submit" loading={post.isPending} disabled={!ready}>
-            <Send size={13} /> Send
-          </Button>
-        )}
+        <Button size="sm" variant={annotating ? 'primary' : 'secondary'} onClick={() => onAnnotate(!annotating)} aria-pressed={annotating}>
+          <PenLine size={13} /> {annotating ? 'Drawing…' : 'Draw on creative'}
+        </Button>
+        <button
+          type="submit"
+          disabled={!body.trim() || post.isPending}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-ink px-3 text-xs font-medium text-white hover:enabled:bg-[#3d39a8] disabled:opacity-55"
+        >
+          <Lock size={13} /> Add note
+        </button>
       </div>
     </form>
   )

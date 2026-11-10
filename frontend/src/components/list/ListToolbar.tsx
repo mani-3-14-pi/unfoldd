@@ -88,16 +88,18 @@ export function ListToolbar({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      {/* Tabs and controls share a row only on very wide screens; below that the tabs get their own row so none are cut off. */}
+      <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
         {tabs ? (
-          <div role="tablist" aria-label={`Filter by ${tabs.key}`} className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 py-0.5">
+          <div role="tablist" aria-label={`Filter by ${tabs.key}`} className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 py-0.5">
             {tab('', tabs.allLabel, tabs.allCount)}
             {tabs.options.map((o) => tab(o.value, o.label, o.count))}
           </div>
         ) : (
           <div />
         )}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Search, filter and sort stay on one line; the tabs scroll instead when space runs out. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap">
           <SearchInput value={query} onChange={(q) => state.update({ q })} placeholder={searchPlaceholder} />
           {(filters.length > 0 || extraFilter) && <FilterButton defs={filters} state={state} extra={extraFilter} extraCount={extraChips.length} />}
           <Menu

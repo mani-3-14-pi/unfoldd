@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import { Link } from 'react-router'
 import { cn } from '@/lib/cn'
 import type { Tone } from './Pill'
 
@@ -43,33 +44,43 @@ const iconTones: Record<Tone, string> = {
   gray: 'bg-gray-soft text-gray-ink',
 }
 
-/** Icon tile, label and a large number, as in the prototype's dashboard. */
+/** Icon tile, label and a large number, as in the prototype's dashboard. With `to`, the whole card links to the list behind the number. */
 export function StatCard({
   label,
   value,
   icon: Icon,
   tone,
   note,
+  to,
 }: {
   label: string
   value: ReactNode
   icon: LucideIcon
   tone: Tone
   note?: ReactNode
+  to?: string
 }) {
-  return (
-    <article className="flex items-start gap-5 rounded-xl border border-border bg-surface px-4 py-3.5">
-      <div className={cn('grid size-11 shrink-0 place-items-center rounded-lg', iconTones[tone])}>
+  const body = (
+    <>
+      <div className={cn('grid size-12 shrink-0 place-items-center rounded-xl', iconTones[tone])}>
         <Icon size={24} strokeWidth={1.8} />
       </div>
       <div className="min-w-0">
-        <div className="text-[13px] text-[#4d5058]">{label}</div>
-        <div className="mt-1 flex items-baseline gap-2">
-          <span className="text-[32px] leading-none font-semibold tracking-tight">{value}</span>
-          {note && <span className="text-xs text-text-3">{note}</span>}
+        <div className="truncate text-[13px] text-[#4d5058]">{label}</div>
+        <div className="mt-1.5 flex items-baseline gap-2">
+          <span className="font-display text-[32px] leading-none font-bold tracking-tight">{value}</span>
+          {note && <span className="text-xs leading-tight text-text-3">{note}</span>}
         </div>
       </div>
-    </article>
+    </>
+  )
+  const box = 'flex min-h-[92px] items-start gap-4 rounded-2xl border border-border bg-surface px-5 py-4'
+  return to ? (
+    <Link to={to} className={cn(box, 'transition-colors hover:border-border-strong hover:bg-[#f6f5f6]')}>
+      {body}
+    </Link>
+  ) : (
+    <article className={box}>{body}</article>
   )
 }
 

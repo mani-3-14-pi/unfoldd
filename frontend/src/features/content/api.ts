@@ -153,6 +153,7 @@ export interface ContentInput {
   due?: string
   publishDate?: string | null
   revisionLimit?: number | null
+  campaign?: string | null
 }
 
 export interface Shape {

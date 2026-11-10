@@ -1,6 +1,6 @@
 // The API for the end-to-end tests: an in-memory MongoDB replica set (transactions need one) and the backend
 // on it. It never reads backend/.env, so tests can't touch a real database, storage bucket or email provider.
-// Playwright starts this as a web server; the DB address is written to e2e/.tmp/mongo-uri for the test helpers.
+// Playwright starts this as a web server; the DB address is written to e2e/.tmp/mongo-uri-<api port> for the test helpers.
 import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -14,6 +14,8 @@ const { MongoMemoryReplSet } = require('mongodb-memory-server')
 const mongoose = require('mongoose')
 
 export const API_PORT = process.env.E2E_API_PORT ?? '8790'
+const WEB_PORT = process.env.E2E_WEB_PORT ?? '5175'
+const CLIENT_PORT = process.env.E2E_CLIENT_PORT ?? '5177'
 
 const replSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } })
 const uri = replSet.getUri('unfoldd_e2e')
@@ -28,7 +30,7 @@ await mongoose.connection.db.collection('settings').updateOne(
 await mongoose.disconnect()
 
 mkdirSync(join(here, '.tmp'), { recursive: true })
-writeFileSync(join(here, '.tmp', 'mongo-uri'), uri)
+writeFileSync(join(here, '.tmp', `mongo-uri-${API_PORT}`), uri)
 
 const api = spawn(process.execPath, ['src/server.ts'], {
   cwd: backend,
@@ -39,7 +41,8 @@ const api = spawn(process.execPath, ['src/server.ts'], {
     NODE_ENV: 'development',
     PORT: API_PORT,
     MONGODB_URI: uri,
-    APP_URL: 'http://localhost:5175',
+    APP_URL: `http://localhost:${WEB_PORT}`,
+    CLIENT_APP_URL: `http://localhost:${CLIENT_PORT}`,
     // 2FA stays off here, as in development; the backend's own tests cover it.
     MFA_REQUIRED: 'false',
     AI_PROVIDER: 'none',

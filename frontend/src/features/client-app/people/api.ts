@@ -27,6 +27,9 @@ export interface SpaceSettings {
 
 export const peopleApi = {
   members: () => api<{ items: Colleague[] }>('/client/members'),
+  /** Client Admins only. The server keeps at least one Admin. */
+  setRole: (userId: string, role: ClientRole) => api<{ ok: true }>(`/client/members/${userId}`, { method: 'PATCH', body: { role } }),
+  remove: (userId: string) => api<{ ok: true }>(`/client/members/${userId}`, { method: 'DELETE' }),
   /** Client Admins only. */
   invitations: () => api<Page<Invitation>>('/client/invitations?pageSize=100'),
   invite: (body: { email: string; role: ClientRole; message?: string }, idempotencyKey: string) =>

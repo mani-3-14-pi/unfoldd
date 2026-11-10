@@ -8,6 +8,8 @@ import { Card, EmptyState } from '@/components/ui/Card'
 import { Details } from '@/components/ui/Details'
 import { Pill } from '@/components/ui/Pill'
 import { Select } from '@/components/ui/Field'
+import { canUploadCreative } from '@/features/agency/roles'
+import { useAgencySession } from '@/features/agency/session'
 import { contentApi, contentKey, type Anchor, type ContentRecord, type Version } from '@/features/content/api'
 import { ChecklistPanel } from '@/features/content/ChecklistPanel'
 import { ContentActions } from '@/features/content/ContentActions'
@@ -27,6 +29,7 @@ import { formatInZone } from '@/lib/zonedTime'
 export function ContentDetailPage() {
   const { id = '' } = useParams()
   const qc = useQueryClient()
+  const session = useAgencySession()
   const query = useQuery({ queryKey: contentKey(id), queryFn: () => contentApi.get(id) })
   const threads = useQuery({ queryKey: ['agency', 'content', 'threads', id], queryFn: () => contentApi.threads(id), enabled: query.isSuccess })
   const [viewing, setViewing] = useState<string | null>(null)
@@ -100,8 +103,12 @@ export function ContentDetailPage() {
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border-strong bg-surface px-6 py-14 text-center">
           <Upload size={24} className="text-text-3" />
           <h2 className="text-sm font-semibold">No creative yet</h2>
-          <p className="max-w-sm text-[13px] text-text-3">Upload V01: the images or video, with the caption and hashtags. Your team and then the client review it.</p>
-          {!['published', 'cancelled', 'publishing'].includes(c.state) && (
+          <p className="max-w-sm text-[13px] text-text-3">
+            {canUploadCreative(session.role)
+              ? 'Upload V01: the images or video, with the caption and hashtags. Your team and then the client review it.'
+              : 'A team member uploads V01: the images or video, with the caption and hashtags. You review it before the client does.'}
+          </p>
+          {canUploadCreative(session.role) && !['published', 'cancelled', 'publishing'].includes(c.state) && (
             <Button variant="primary" onClick={() => setUploading(true)}>
               <Upload size={15} /> Upload V01
             </Button>

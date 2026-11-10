@@ -104,6 +104,9 @@ export interface DecisionInput {
 
 const key = () => crypto.randomUUID()
 
+/** A recorded voice note sent with a comment or reply (feedback.service `buildMessage`). */
+type VoiceInput = { file: string; durationMs: number }
+
 export const clientContentApi = {
   list: (query: string) => api<Page<ClientContentCard> & { counts: Record<ClientBucket, number> }>(`/client/content?${query}`),
   get: (id: string) => api<{ content: ClientContentDetail }>(`/client/content/${id}`),
@@ -113,14 +116,14 @@ export const clientContentApi = {
   checklist: (id: string) => api<{ items: ClientChecklistItem[] }>(`/client/content/${id}/checklist`),
 
   /** A comment goes into the person's pending review: only they see it until they send it (D14). */
-  addDraft: (id: string, body: { versionId: string; body: string; anchor?: Anchor }) =>
+  addDraft: (id: string, body: { versionId: string; body: string; anchor?: Anchor; voice?: VoiceInput }) =>
     api<{ thread: Thread }>(`/client/content/${id}/threads`, { body, idempotencyKey: key() }),
   editDraft: (id: string, threadId: string, body: { body?: string; anchor?: Anchor | null }) =>
     api<{ thread: Thread }>(`/client/content/${id}/threads/${threadId}`, { method: 'PATCH', body }),
   discardDraft: (id: string, threadId: string) => api<void>(`/client/content/${id}/threads/${threadId}`, { method: 'DELETE' }),
   /** D83: a draft written on a version that was replaced, moved to the current one. */
   copyToCurrent: (id: string, threadId: string) => api<{ thread: Thread }>(`/client/content/${id}/threads/${threadId}/copy-to-current`, { method: 'POST' }),
-  reply: (id: string, threadId: string, body: string) => api<{ message: Message }>(`/client/content/${id}/threads/${threadId}/messages`, { body: { body } }),
+  reply: (id: string, threadId: string, body: { body: string; voice?: VoiceInput }) => api<{ message: Message }>(`/client/content/${id}/threads/${threadId}/messages`, { body }),
   reopen: (id: string, threadId: string) => api<{ thread: Thread }>(`/client/content/${id}/threads/${threadId}/reopen`, { method: 'POST' }),
 
   /** "Send feedback": the drafts go to the agency without a decision. */

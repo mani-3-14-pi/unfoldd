@@ -12,10 +12,17 @@ const schema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   /** Where the frontend lives; used to build links in emails (invites, notifications). */
   APP_URL: z.string().default('http://localhost:5173'),
+  /** The client app (client/). Client invite links open here; without it they open in APP_URL. */
+  CLIENT_APP_URL: optional,
   /** This API's public address; OAuth providers redirect back to it. */
   API_URL: z.string().default('http://localhost:8787'),
   /** Encrypts 2FA seeds and platform tokens at rest. Required in production (any long random string). */
   SECRET_KEY: optional,
+  /**
+   * Signs the session JWTs (HS256). Required in production: a long random string (e.g. `openssl rand -base64 48`),
+   * kept only in the server's environment and never in git, the frontend or logs. Rotating it signs everyone out.
+   */
+  JWT_SECRET: optional,
   /**
    * 2FA for platform admins and agency owners. Off for now while the product is being built: logins open a
    * session straight away. Turn it on (MFA_REQUIRED=true) before going live.
@@ -24,9 +31,14 @@ const schema = z.object({
   /** Turns off the in-process job worker, e.g. on API-only instances when a separate worker runs. */
   JOBS_DISABLED: z.stringbool().default(false),
 
-  // Email. Without RESEND_API_KEY the dev mailer only logs and stores messages.
+  // Email through SMTP (Nodemailer). Without SMTP_HOST the dev mailer only logs and stores messages.
   EMAIL_FROM: z.string().default('Unfoldd <no-reply@unfoldd.app>'),
-  RESEND_API_KEY: optional,
+  SMTP_HOST: optional,
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  /** true for port 465 (TLS from the start); false for 587, which upgrades with STARTTLS. */
+  SMTP_SECURE: z.stringbool().default(false),
+  SMTP_USER: optional,
+  SMTP_PASS: optional,
   /** Where support tickets are emailed (D67 "Report issue"). */
   SUPPORT_EMAIL: optional,
 

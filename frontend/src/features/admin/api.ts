@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import type { Ticket, TicketStatus } from '@/features/support/api'
 import type { Page } from '@/types/api'
 
 // Platform (super) admin API: /api/admin/*. Session is the httpOnly `uf_admin` cookie.
@@ -59,7 +60,7 @@ export interface Member {
   role: (typeof MEMBER_ROLES)[number]
   status: (typeof MEMBER_STATUSES)[number]
   createdAt: string
-  user: { _id: string; name: string; email: string; lastLoginAt?: string }
+  user: { _id: string; name: string; email: string; lastLoginAt?: string; twoFactorEnabled: boolean }
 }
 
 export interface Activity {
@@ -89,6 +90,20 @@ export interface Overview {
   pending: Pick<Agency, '_id' | 'name' | 'email' | 'country' | 'teamSize' | 'createdAt'>[]
   recentActivity: Pick<Activity, '_id' | 'action' | 'message' | 'actor' | 'createdAt'>[]
   autoApprove: boolean
+  /** Tickets nobody has answered yet. */
+  support: { open: number }
+}
+
+export const TICKET_STATUSES = ['open', 'in_progress', 'waiting_on_user', 'resolved'] as const
+
+/** A support ticket as the support inbox sees it: who raised it and from which agency or client space. */
+export interface AdminTicket extends Ticket {
+  agency: string | null
+  client: string | null
+  agencyName: string | null
+  clientName: string | null
+  user: { id: string; name: string; email?: string; side: 'agency' | 'client' }
+  context: { url: string; entityType: string; entityId: string; userAgent: string }
 }
 
 export type AgencyAction = 'approve' | 'reject' | 'suspend' | 'reactivate'
@@ -116,6 +131,8 @@ export const adminApi = {
   agencies: (query: string) => api<AgencyPage>(`/admin/agencies?${query}`),
   agency: (id: string) => api<{ agency: AgencyDetail }>(`/admin/agencies/${id}`),
   members: (id: string, query: string) => api<Page<Member>>(`/admin/agencies/${id}/members?${query}`),
+  /** Lost authenticator: they set 2FA up again at next login, and are signed out everywhere. */
+  resetMember2fa: (id: string, userId: string) => api<void>(`/admin/agencies/${id}/members/${userId}/reset-2fa`, { method: 'POST' }),
   agencyAction: (id: string, action: AgencyAction, reason?: string) =>
     api<{ agency: Agency }>(`/admin/agencies/${id}/${action}`, { body: { reason } }),
   impersonate: (id: string) => api<{ url: string }>(`/admin/agencies/${id}/impersonate`, { method: 'POST' }),
@@ -124,6 +141,11 @@ export const adminApi = {
 
   subscriptions: (query: string) => api<SubscriptionPage>(`/admin/subscriptions?${query}`),
   activity: (query: string) => api<ActivityPage>(`/admin/activity?${query}`),
+  tickets: (query: string) => api<Page<AdminTicket>>(`/admin/support?${query}`),
+  ticket: (id: string) => api<{ ticket: AdminTicket }>(`/admin/support/${id}`),
+  replyTicket: (id: string, body: { body: string; status: TicketStatus }) => api<{ ticket: AdminTicket }>(`/admin/support/${id}/reply`, { body }),
+  setTicketStatus: (id: string, status: TicketStatus) => api<{ ticket: AdminTicket }>(`/admin/support/${id}`, { method: 'PATCH', body: { status } }),
+
   settings: () => api<{ settings: Settings }>('/admin/settings'),
   updateSettings: (body: Omit<Settings, 'updatedAt'>) => api<{ settings: Settings }>('/admin/settings', { method: 'PUT', body }),
 }

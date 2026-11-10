@@ -6,6 +6,8 @@ import type { AgencyRole, ClientRole } from './api'
 export const isAgencyAdmin = (role: AgencyRole) => role === 'owner' || role === 'admin'
 /** Owner, Admin and Manager: create clients, manage client people and contracts. */
 export const isManagerPlus = (role: AgencyRole) => role !== 'member'
+/** Making and uploading the creative is the team members' job; everyone above them reviews it. */
+export const canUploadCreative = (role: AgencyRole) => role === 'member'
 
 /** Roles that can be given by invite or role change. Ownership moves only by transfer. */
 export const ASSIGNABLE_ROLES = ['admin', 'manager', 'member'] as const satisfies readonly AgencyRole[]
@@ -15,7 +17,7 @@ export const agencyRoleHint: Record<AgencyRole, string> = {
   owner: 'Everything, including billing and transferring ownership.',
   admin: 'Team, settings and every client.',
   manager: 'Assigned clients: approve internally, send to client, manage client people.',
-  member: 'Assigned clients: create content, upload versions, work on tasks.',
+  member: 'Assigned clients: make and upload the creative, work on tasks.',
 }
 
 export const clientRoleLabel: Record<ClientRole, string> = { admin: 'Admin', approver: 'Approver', contributor: 'Contributor', viewer: 'Viewer' }

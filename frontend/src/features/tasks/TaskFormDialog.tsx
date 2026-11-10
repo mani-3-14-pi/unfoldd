@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useAgencySession } from '@/features/agency/session'
+import { campaignsApi } from '@/features/campaigns/api'
 import { clientsApi } from '@/features/clients/api'
 import { contentApi, PRIORITIES, type Priority } from '@/features/content/api'
 import { priorityLabel } from '@/features/content/labels'
@@ -18,6 +19,7 @@ export function TaskFormDialog({
   task,
   clientId: fixedClient,
   contentId: fixedContent,
+  campaignId: fixedCampaign,
   onClose,
   onSaved,
   onReload,
@@ -25,6 +27,8 @@ export function TaskFormDialog({
   task?: Task
   clientId?: string
   contentId?: string
+  /** Pre-picks the campaign when adding a task from a campaign's page. */
+  campaignId?: string
   onClose: () => void
   onSaved: (task: Task) => void
   onReload?: () => void
@@ -39,6 +43,11 @@ export function TaskFormDialog({
     enabled: !task && !!clientId,
   })
   const people = useClientPeople(clientId)
+  const campaigns = useQuery({
+    queryKey: ['agency', 'campaigns', 'list', `client=${clientId}&pageSize=100`],
+    queryFn: () => campaignsApi.list(`client=${clientId}&pageSize=100`),
+    enabled: !!clientId,
+  })
 
   const [f, setF] = useState({
     title: task?.title ?? '',
@@ -47,13 +56,15 @@ export function TaskFormDialog({
     due: task?.due ?? '',
     priority: (task?.priority ?? 'normal') as Priority,
     content: fixedContent ?? '',
+    campaign: task?.campaign ?? fixedCampaign ?? '',
   })
   const set = (key: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [key]: e.target.value }))
 
   const save = useMutation({
     mutationFn: async () => {
-      const body = { title: f.title.trim(), description: f.description, owner: f.owner || null, due: f.due, priority: f.priority }
-      if (task) return (await tasksApi.update(task._id, { ...body, rev: task.rev })).task
+      const body = { title: f.title.trim(), description: f.description, owner: f.owner || null, due: f.due, priority: f.priority, campaign: f.campaign || null }
+      // An archived campaign isn't in the picker: leave the link alone unless it was changed here.
+      if (task) return (await tasksApi.update(task._id, { ...body, campaign: f.campaign === (task.campaign ?? '') ? undefined : body.campaign, rev: task.rev })).task
       return (await tasksApi.create({ ...body, client: clientId, ...(f.content ? { content: f.content } : {}) }, idem.key)).task
     },
     onSuccess: onSaved,
@@ -87,7 +98,7 @@ export function TaskFormDialog({
                 disabled={!!fixedClient}
                 onChange={(e) => {
                   setClientId(e.target.value)
-                  setF((x) => ({ ...x, content: '' }))
+                  setF((x) => ({ ...x, content: '', campaign: '' }))
                 }}
               >
                 <option value="">Choose a client…</option>
@@ -138,6 +149,16 @@ export function TaskFormDialog({
             </Select>
           </Field>
         </div>
+        <Field label="Campaign (optional)" htmlFor="tk-campaign" error={errors.campaign}>
+          <Select id="tk-campaign" value={f.campaign} onChange={set('campaign')} disabled={!clientId || !!fixedCampaign}>
+            <option value="">None</option>
+            {campaigns.data?.items.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field label="Description" htmlFor="tk-description" error={errors.description}>
           <Textarea id="tk-description" value={f.description} onChange={set('description')} maxLength={20_000} className="min-h-24" />
         </Field>

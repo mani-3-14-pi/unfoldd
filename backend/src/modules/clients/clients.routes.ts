@@ -238,11 +238,12 @@ clientsRouter.post('/:id/:action', async (req, res, next) => {
   res.json({ client: await present(req, client.toObject()) })
 })
 
-/** Soft delete (D61). Owner/Admin only; the client's people lose access at once. */
+/** Soft delete (D61). Owner/Admin only; the client's people lose access at once and pending invite links stop working. */
 clientsRouter.delete('/:id', requireRole('owner', 'admin'), async (req, res) => {
   const auth = req.agencyAuth!
   const client = await loadClient(req, objectId(req.params.id, 'Client not found.'))
   await ClientModel.updateOne({ _id: client._id, agency: auth.agency._id }, { $set: { deletedAt: new Date(), deletedBy: auth.user._id } })
+  await InvitationModel.updateMany({ client: client._id, status: 'pending' }, { $set: { status: 'revoked' } })
   const members = await ClientMemberModel.find({ client: client._id }, { user: 1 }).lean()
   await Promise.all(members.map((m) => revokeClientMemberSessions(m.user, client._id)))
   await logActivity(req, {

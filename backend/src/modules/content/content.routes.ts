@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express'
+import { Router, type Request, type RequestHandler } from 'express'
 import type { PipelineStage, Types } from 'mongoose'
 import { z } from 'zod'
 import { diff, logActivity } from '../../lib/activity.ts'
@@ -8,7 +8,7 @@ import { csvEnum, escapeRegex, pageQuery, paginateAggregate } from '../../lib/pa
 import { loadClient, scopeFilter } from '../../lib/scope.ts'
 import { dateOnlySchema } from '../../lib/time.ts'
 import { idempotent } from '../../middleware/idempotency.ts'
-import { AppError, invalid, notFound } from '../../utils/AppError.ts'
+import { AppError, forbidden, invalid, notFound } from '../../utils/AppError.ts'
 import { AgencyAccessModel } from '../clients/agencyAccess.model.ts'
 import { CampaignModel } from '../campaigns/campaign.model.ts'
 import { ClientModel } from '../clients/client.model.ts'
@@ -307,7 +307,13 @@ const versionSchema = z.object({
   resolutionNote: z.string().trim().max(2000).default(''),
 })
 
-contentRouter.post('/:id/versions', idempotent(), async (req, res) => {
+/** Making and uploading the creative is the team members' job: owners, admins and managers review it instead. */
+const creativeMakers: RequestHandler = (req, _res, next) => {
+  if (req.agencyAuth!.role !== 'member') throw forbidden('Only team members upload the creative.')
+  next()
+}
+
+contentRouter.post('/:id/versions', creativeMakers, idempotent(), async (req, res) => {
   const input = versionSchema.parse(req.body)
   const content = await loadContent(req, req.params.id, 'write')
   const result = await svc.uploadVersion(req, content, {
@@ -321,7 +327,7 @@ contentRouter.post('/:id/versions', idempotent(), async (req, res) => {
 const versionEditSchema = versionSchema.pick({ files: true, caption: true, hashtags: true, changeNote: true }).partial()
 
 /** A version can be edited only until it's submitted. After that, a change is a new version (D06). */
-contentRouter.patch('/:id/versions/:versionId', async (req, res) => {
+contentRouter.patch('/:id/versions/:versionId', creativeMakers, async (req, res) => {
   const input = versionEditSchema.parse(req.body)
   const content = await loadContent(req, req.params.id, 'write')
   const versionId = objectId(req.params.versionId, 'Version not found.')

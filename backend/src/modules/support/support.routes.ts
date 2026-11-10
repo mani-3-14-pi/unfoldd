@@ -7,6 +7,8 @@ import { sendEmail } from '../../lib/mailer.ts'
 import { csvEnum, pageQuery, paginate } from '../../lib/pagination.ts'
 import { currentUser } from '../../lib/scope.ts'
 import { AppError, notFound } from '../../utils/AppError.ts'
+import { AgencyModel } from '../agencies/agency.model.ts'
+import { ClientModel } from '../clients/client.model.ts'
 import { UserModel } from '../users/user.model.ts'
 import { SupportTicketModel, TICKET_CATEGORIES, TICKET_STATUSES } from './support.model.ts'
 
@@ -76,14 +78,32 @@ supportAdminRouter.get('/', async (req, res) => {
   const filter: Record<string, unknown> = {}
   filter.status = { $in: f.status.length ? f.status : ['open', 'in_progress', 'waiting_on_user'] }
   if (f.category.length) filter.category = { $in: f.category }
-  if (f.q) filter.subject = new RegExp(f.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
-  res.json(await paginate(SupportTicketModel, filter, { page: f.page, pageSize: f.pageSize, sort: { lastMessageAt: -1 } }))
+  if (f.q) {
+    const rx = new RegExp(f.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+    filter.$or = [{ subject: rx }, { 'user.name': rx }, { 'user.email': rx }]
+  }
+  const page = await paginate(SupportTicketModel, filter, { page: f.page, pageSize: f.pageSize, sort: { lastMessageAt: -1 } })
+  res.json({ ...page, items: await withNames(page.items) })
 })
+
+/** Which agency and client space each ticket came from, by name, for the support inbox. */
+async function withNames<T extends { agency?: unknown; client?: unknown }>(tickets: T[]) {
+  const [agencies, clients] = await Promise.all([
+    AgencyModel.find({ _id: { $in: tickets.map((t) => t.agency).filter(Boolean) } }, { name: 1 }).lean(),
+    ClientModel.find({ _id: { $in: tickets.map((t) => t.client).filter(Boolean) } }, { brandName: 1 }).lean(),
+  ])
+  return tickets.map((t) => ({
+    ...t,
+    agencyName: agencies.find((a) => String(a._id) === String(t.agency))?.name ?? null,
+    clientName: clients.find((c) => String(c._id) === String(t.client))?.brandName ?? null,
+  }))
+}
 
 supportAdminRouter.get('/:id', async (req, res) => {
   const t = await SupportTicketModel.findById(objectId(req.params.id, 'Ticket not found.')).lean()
   if (!t) throw notFound('Ticket not found.')
-  res.json({ ticket: t })
+  const [ticket] = await withNames([t])
+  res.json({ ticket })
 })
 
 const replySchema = z.object({ body: z.string().trim().min(1).max(10_000), status: z.enum(TICKET_STATUSES).default('waiting_on_user') })
@@ -107,5 +127,11 @@ supportAdminRouter.patch('/:id', async (req, res) => {
   const { status } = z.object({ status: z.enum(TICKET_STATUSES) }).parse(req.body)
   const t = await SupportTicketModel.findByIdAndUpdate(objectId(req.params.id, 'Ticket not found.'), { $set: { status, resolvedAt: status === 'resolved' ? new Date() : null } }, { returnDocument: 'after' }).lean()
   if (!t) throw new AppError(404, 'not_found', 'Ticket not found.')
+  await logActivity(req, {
+    action: 'support.status_changed',
+    message: `${req.admin!.name} marked “${t.subject}” ${status.replace(/_/g, ' ')}`,
+    agency: t.agency ?? undefined,
+    visibility: 'platform',
+  })
   res.json({ ticket: t })
 })

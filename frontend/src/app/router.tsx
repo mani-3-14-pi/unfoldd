@@ -117,6 +117,7 @@ export const router = createBrowserRouter([
           page('approvals', () => import('@/pages/admin/ApprovalsPage').then((m) => m.ApprovalsPage)),
           page('subscriptions', () => import('@/pages/admin/SubscriptionsPage').then((m) => m.SubscriptionsPage)),
           page('activity', () => import('@/pages/admin/ActivityPage').then((m) => m.ActivityPage)),
+          page('support', () => import('@/pages/admin/SupportPage').then((m) => m.SupportPage)),
           page('settings', () => import('@/pages/admin/SettingsPage').then((m) => m.SettingsPage)),
           { path: '*', element: <NotFoundPage /> },
         ],

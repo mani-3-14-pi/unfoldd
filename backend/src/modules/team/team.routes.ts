@@ -15,7 +15,7 @@ import { AgencyAccessModel } from '../clients/agencyAccess.model.ts'
 import { ClientModel } from '../clients/client.model.ts'
 import { INVITATION_STATUSES, InvitationModel } from '../invitations/invitation.model.ts'
 import { createInvitation, presentInvitation, resendInvitation, revokeInvitation } from '../invitations/invitation.service.ts'
-import { MEMBER_ROLES, MEMBER_STATUSES, MembershipModel } from '../users/membership.model.ts'
+import { DEFAULT_CAPACITY, MEMBER_ROLES, MEMBER_STATUSES, MembershipModel } from '../users/membership.model.ts'
 import { UserModel } from '../users/user.model.ts'
 
 /** Team members (P130–P135) and agency invitations. Everyone can see the team; Owner/Admin manage it. */
@@ -52,6 +52,8 @@ const memberLookup: PipelineStage[] = [
   },
   { $set: { clientCount: { $ifNull: [{ $first: '$access.n' }, 0] } } },
   { $unset: 'access' },
+  // Memberships stored before these fields existed have none; aggregations skip schema defaults.
+  { $set: { titles: { $ifNull: ['$titles', []] }, departments: { $ifNull: ['$departments', []] }, capacity: { $ifNull: ['$capacity', DEFAULT_CAPACITY] } } },
 ]
 
 const SORTS = { name: { 'user.name': 1 }, newest: { createdAt: -1 }, oldest: { createdAt: 1 }, role: { role: 1 } } as const

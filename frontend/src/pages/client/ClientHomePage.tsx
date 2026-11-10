@@ -37,16 +37,50 @@ export function ClientHomePage() {
     <div className="flex flex-col gap-6">
       <header>
         <p className="text-[13px] text-text-3">{s.client.brandName}</p>
-        <h1 className="mt-1 font-serif text-[32px] leading-tight text-brand">
-          Good {h.greeting.partOfDay}, {h.greeting.name}
+        <h1 className="mt-1 font-display text-[30px] leading-[1.1] font-bold tracking-[-0.02em] sm:text-[36px]">
+          Good {h.greeting.partOfDay}, <span className="font-serif font-normal text-brand">{h.greeting.name}</span>
         </h1>
+        <p className="mt-1.5 text-sm text-text-2">Here’s what needs you today.</p>
       </header>
 
+      <HomeStats home={h} />
       {h.banners.length > 0 && <Banners banners={h.banners} />}
       <NeedsAttention home={h} tz={s.client.timezone} />
       {h.nextMeeting && <NextMeetingCard meeting={h.nextMeeting} tz={s.client.timezone} />}
       <Upcoming home={h} tz={s.client.timezone} />
     </div>
+  )
+}
+
+/**
+ * Counts from the Needs Attention list, which the server sends whole, as Matcha-style icon tiles.
+ * Compact on phones (three across), roomier from sm up.
+ */
+function HomeStats({ home: h }: { home: ClientHome }) {
+  const count = (kind: AttentionItem['kind']) => h.needsAttention.items.filter((a) => a.kind === kind).length
+  const stats = [
+    { label: 'To review', value: count('review'), icon: ClipboardCheck, tile: 'bg-[#faf0e3] text-[#b36d27]', to: '/c/content' },
+    { label: 'Plans to review', value: count('plan'), icon: LayoutGrid, tile: 'bg-indigo-soft text-indigo-ink', to: '/c/plans' },
+    { label: 'Needed from you', value: count('request'), icon: Inbox, tile: 'bg-blue-soft text-blue-ink', to: '/c/requests' },
+  ]
+  return (
+    <section aria-label="At a glance" className="grid grid-cols-3 gap-2.5 sm:gap-4">
+      {stats.map((st) => (
+        <Link
+          key={st.label}
+          to={st.to}
+          className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-3 transition-colors hover:border-border-strong hover:bg-[#f6f5f6] sm:flex-row sm:items-start sm:gap-4 sm:px-5 sm:py-4"
+        >
+          <span className={`grid size-10 shrink-0 place-items-center rounded-xl sm:size-12 ${st.tile}`}>
+            <st.icon size={21} strokeWidth={1.8} />
+          </span>
+          <span className="min-w-0">
+            <span className="line-clamp-2 block text-xs leading-tight text-[#4d5058] sm:text-[13px]">{st.label}</span>
+            <span className="mt-1 block font-display text-[26px] leading-none font-bold tracking-tight sm:mt-1.5 sm:text-[32px]">{st.value}</span>
+          </span>
+        </Link>
+      ))}
+    </section>
   )
 }
 

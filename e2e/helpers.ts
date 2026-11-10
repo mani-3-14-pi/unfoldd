@@ -7,7 +7,11 @@ let counter = 0
 /** A unique suffix per call, so parallel tests never collide on emails or names. */
 export const unique = () => `${Date.now().toString(36)}${(counter++).toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
-const dbUri = () => readFileSync(join(__dirname, '.tmp', 'mongo-uri'), 'utf8')
+const dbUri = () => readFileSync(join(__dirname, '.tmp', `mongo-uri-${process.env.E2E_API_PORT ?? '8790'}`), 'utf8')
+
+/** The agency portal and client app origins (see playwright.config.ts). */
+export const WEB = `http://localhost:${process.env.E2E_WEB_PORT ?? '5175'}`
+export const CLIENT_APP = `http://localhost:${process.env.E2E_CLIENT_PORT ?? '5177'}`
 
 /** Direct access to the test database, for what the browser can't do without outside services (R2, email). */
 export async function withDb<T>(fn: (db: ReturnType<MongoClient['db']>) => Promise<T>) {
@@ -32,18 +36,49 @@ export function watchErrors(page: Page) {
   return () => expect(errors, errors.join('\n')).toEqual([])
 }
 
-/** Signs up a new agency through the UI (approved at once in the test setup) and lands on the dashboard. */
+/**
+ * Signs up a new agency through the UI and lands on the dashboard. The test setup approves new agencies at once,
+ * but onboarding-admin.spec.ts turns auto-approve (and signups) off for a few seconds while other files run:
+ * a signup left pending is approved in the database and logged in, and a closed signup page is retried.
+ */
 export async function signUpOwner(page: Page) {
   const id = unique()
   const email = `owner-${id}@e2e.test`
-  await page.goto('/signup')
-  await page.fill('#su-name', 'Asha Owner')
-  await page.fill('#su-email', email)
-  await page.fill('#su-agency', `Studio ${id}`)
-  await page.fill('#su-password', 'correct-horse-battery')
+  const agencyName = `Studio ${id}`
+  for (let attempt = 0; ; attempt++) {
+    await page.goto('/signup')
+    await page.waitForFunction(() => !!document.querySelector('#su-name') || document.body.innerText.includes('Signups are closed'))
+    if (!(await page.locator('#su-name').count())) {
+      if (attempt > 60) throw new Error('Signups stayed closed')
+      await page.waitForTimeout(500)
+      continue
+    }
+    await page.fill('#su-name', 'Asha Owner')
+    await page.fill('#su-email', email)
+    await page.fill('#su-agency', agencyName)
+    await page.fill('#su-password', 'correct-horse-battery')
+    await page.click('button[type=submit]')
+    await page.waitForFunction(() =>
+      location.pathname === '/app' || /waiting for approval from the Unfoldd team|signups are closed right now/.test(document.body.innerText),
+    )
+    if (new URL(page.url()).pathname === '/app') return { email, agencyName }
+    if (await page.getByText('waiting for approval from the Unfoldd team').count()) break
+    // Signups closed between loading the form and sending it: nothing was created, so try again.
+    await page.waitForTimeout(500)
+  }
+  const now = new Date()
+  await withDb((db) =>
+    db.collection('agencies').updateOne(
+      { email, status: 'pending' },
+      { $set: { status: 'active', approvedAt: now, statusChangedAt: now, 'subscription.startedAt': now, 'subscription.renewsAt': new Date(now.getTime() + 14 * 86_400_000) } },
+    ),
+  )
+  await page.goto('/login')
+  await page.fill('#login-email', email)
+  await page.fill('#login-password', 'correct-horse-battery')
   await page.click('button[type=submit]')
   await page.waitForURL('**/app')
-  return { email, agencyName: `Studio ${id}` }
+  return { email, agencyName }
 }
 
 /** Calls the API with the page's session cookie. Create actions get an Idempotency-Key. */
